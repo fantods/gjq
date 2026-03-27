@@ -1,72 +1,134 @@
-# Copilot Coding Agent Instructions
-
-This document provides instructions for AI coding agents working on this repository.
+# Agent Instructions
 
 ## Project Overview
 
-TODO
+`gjq` is a CLI tool (Go port of [jsongrep](https://github.com/micahkepe/jsongrep)) for querying JSON documents using **regular path expressions**. Queries are regular expressions applied to JSON paths (field names and array indices), compiled into a DFA for efficient traversal. Reference implementation: `.ref/jsongrep/`.
 
 ## Technology Stack
 
-- **Go**: 1.21+ required
-- **Validation**: [go-playground/validator/v10](https://github.com/go-playground/validator)
+- **Go** 1.21+, module `github.com/fantods/gjq`
+- **CLI**: [spf13/cobra](https://github.com/spf13/cobra)
+- **No other external dependencies** — ANSI codes written directly, JSON parsing via stdlib
+
+## Commands
+
+```bash
+go build ./...          # build
+go test ./...           # run tests
+go fmt ./...            # format
+go run main.go          # run
+```
+
+Run `go test ./...` before committing.
+
+## Code Style
+
+- Handle errors explicitly — never ignore with `_`.
+- No comments unless requested.
+- Follow existing patterns in neighboring files.
 
 ## Directory Structure
 
-- cmd: Entry points for various subcommands in the CLI.
-- models: Structs for domain entities used across the application.
-- pkg: Shared packages that may be used by other applications.
-- vendor: Application dependencies.
-
 ```
 ./
-├── cmd
-│   ├── root.go
-│   ├── subcommand1.go
-│   └── subcommand2.go
-├── internal
-│   ├── fileutils
-│   └── apiutils
-├── models
-├── pkg
-└── vendor
+├── cmd/
+│   ├── root.go            # CLI entry point, flags, query pipeline
+│   └── version.go
+├── internal/
+│   ├── output/            # (planned) Colorized JSON output
+│   └── query/
+│       ├── ast.go         # Query AST node types and constructors
+│       ├── common.go      # PathType, JSONPointer, TransitionLabel
+│       ├── dfa.go         # DFA construction + traversal (Find)
+│       ├── nfa.go         # Glushkov NFA construction
+│       └── parser.go      # Recursive descent query parser
+├── tests/
+│   ├── cli_test.go        # CLI integration tests
+│   └── data/              # Test JSON fixtures
+├── main.go
+└── .ref/jsongrep/         # Rust reference implementation
 ```
 
-## Development Commands
+---
 
-```bash
-# Install dependencies
-go mod download
+## Implementation Plan
 
-# Build
-go build ./...
+### Current Status
 
-# Run tests
-go test ./...
+**Completed:**
+- Query AST — all node types with constructors and `Depth()`
+- Recursive descent parser — full grammar (fields, indices, ranges, wildcards, regex, groups, disjunction, sequence, optional, Kleene star, quoted fields)
+- Glushkov NFA construction — linearization, first/last/follows sets, epsilon-free NFA
+- DFA via subset construction — symbol extraction, disjoint range finalization, determinization, `Find()` traversal
+- CLI stub — all flags defined, input reading (file/stdin), `--with-path`/`--no-path` resolution
+- `ParseJSON()` with `json.Number` → `int`/`float64` conversion
+- Case-insensitive DFA compilation and traversal
+- Unit tests for parser, NFA, DFA; CLI integration tests
 
-# Run tests with coverage
-go test -coverprofile=coverage.out ./...
+**Not yet done:**
+- `cmd/root.go` stub returns debug print instead of executing query pipeline
+- Colorized JSON output formatting (`internal/output/`)
+- `Query.String()` round-trip display method
+- Binary search optimization for range lookups in DFA
 
-# Format code
-go fmt ./...
+### Phase 1: Output Formatting (`internal/output/output.go`)
 
-# Run linter
-golangci-lint run
+New package for colorized JSON output.
 
-# Start the server
-go run main.go
-```
+**API:**
+- `WriteResult(w io.Writer, value interface{}, path []query.PathType, pretty, showPath, colorize bool) error` — single result (path header + JSON). Silently returns on broken pipe.
+- `writeColoredJSON(w io.Writer, value interface{}, indent int, pretty, colorize bool) error` — recursive syntax highlighting via raw ANSI escape codes.
+- `Depth(value interface{}) int` — max nesting depth for `--depth`.
 
-## Code Style Guidelines
+**Color scheme:**
+- `null` → dim red | Booleans → bold yellow | Numbers → yellow | Strings → green | Object keys → cyan | Path headers → bold magenta | Labels ("Found matches:", "Depth:") → bold blue
 
-1. **Error Handling**: Always handle errors explicitly. Do not ignore errors with `_`.
+**Rendering:** Hand-roll pretty-printer (interleave ANSI codes). Use `json.Marshal` only for individual string escaping. Accept `io.Writer` for `bufio` wrapping. Suppress color when stdout is not a terminal or `NO_COLOR` is set.
 
-## Testing
+### Phase 2: `Query.String()` (`internal/query/ast.go`)
 
-- Tests are in `*_test.go` files alongside source code
-- Run `go test ./...` before committing changes
+Round-trip display method matching reference `Display` impl:
+- `Field("foo")` → `foo` | `Field("a.b")` → `"a.b"` (quote if reserved chars/whitespace)
+- `Index(3)` → `[3]` | `Range(2,5)` → `[2:5]` | `RangeFrom(3)` → `[3:]`
+- `FieldWildcard` → `*` | `ArrayWildcard` → `[*]` | `Regex(p)` → `/p/`
+- `Optional(q)` → `q?` | `KleeneStar(q)` → `q*` (wrap in parens if inner is multi-element disjunction/sequence)
+- `Disjunction([a,b])` → `a | b`
+- `Sequence([a,b])` → `a.b` (no dot before `[...]`)
 
+Helpers: `needsQuoting(name) bool`, `escapeForQuotedField(name) string`.
 
-## Security Considerations
+### Phase 3: Wire Up CLI (`cmd/root.go`)
 
-- Always validate user input using validator tags
+Replace stub `runRoot()` with:
+
+1. **Resolve query** — `-F` → `Sequence([KleeneStar(Disjunction([FieldWildcard, ArrayWildcard])), Field(queryStr)])`. Else `ParseQuery(queryStr)`.
+2. **Read input** — `readInput()`.
+3. **Parse JSON** — `query.ParseJSON(string(data))`.
+4. **Compile DFA** — `query.NewQueryDFA(&q, flagIgnoreCase)`.
+5. **Execute** — `dfa.Find(json)`.
+6. **Output** — `bufio.NewWriterSize(os.Stdout, 4096)`, then:
+   - `--count` → bold blue "Found matches: N"
+   - `--depth` → bold blue "Depth: N" (call `output.Depth(json)`)
+   - not `--no-display` → iterate results, `output.WriteResult(...)`
+   - Flush; silently ignore `syscall.EPIPE`.
+7. **Errors** → exit code 1.
+
+### Phase 4: Performance
+
+- **4a.** Binary search in `IndexSymbolID()` via `sort.Search` over sorted `d.Ranges` — O(log n) per array element.
+- **4b.** Pre-allocate `path` capacity; only clone on accept in `traverse()`.
+- **4c.** Pass `bytes.Reader` directly to `json.Decoder` instead of `string(data)` copy.
+- **4d.** (Future) `syscall.Mmap` for large files on darwin/linux.
+
+### Phase 5: Test Coverage
+
+- CLI: `--count`/`--no-display`, `--depth`, `-F` multiple matches, `--compact`, `-i`, new `tests/data/nested.json`
+- Output: `Depth()`, `WriteResult()` with/without paths/compact/color, broken pipe
+- String round-trip: `ParseQuery(s).String() == s` for all syntax, `-F` constructed query
+
+### Implementation Order
+
+1. Phase 1 + 2 (parallel, no dependencies)
+2. Phase 3 (depends on 1 + 2)
+3. Phase 4 (depends on 3)
+4. Phase 5 (interleaved)
