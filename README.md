@@ -1,6 +1,6 @@
 # gjq - Go JSON Query
 
-`gjq` is a go-based CLI tool for querying JSON using *regular path querys*
+`gjq` is a go-based CLI tool for querying JSON using *regular path queries*
 
 ## What is gjq?
 
