@@ -2,37 +2,13 @@ package tests
 
 import (
 	"encoding/json"
-	"fmt"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"testing"
 )
 
-var binaryPath string
-
-func TestMain(m *testing.M) {
-	tmpDir, err := os.MkdirTemp("", "gjq-test-*")
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to create temp dir: %v\n", err)
-		os.Exit(1)
-	}
-	defer os.RemoveAll(tmpDir)
-
-	binaryPath = filepath.Join(tmpDir, "gjq")
-	build := exec.Command("go", "build", "-o", binaryPath, ".")
-	build.Dir = filepath.Join("..")
-	if output, err := build.CombinedOutput(); err != nil {
-		fmt.Fprintf(os.Stderr, "failed to build gjq: %v\n%s\n", err, output)
-		os.Exit(1)
-	}
-
-	os.Exit(m.Run())
-}
-
 func runGjq(args ...string) *exec.Cmd {
-	return exec.Command(binaryPath, args...)
+	return exec.Command("gjq", args...)
 }
 
 func runGjqSuccess(t *testing.T, args ...string) string {
@@ -54,12 +30,8 @@ func runGjqFailure(t *testing.T, args ...string) {
 	}
 }
 
-func testDataPath(filename string) string {
-	return filepath.Join("data", filename)
-}
-
 func TestNonexistentFieldSimpleQuery(t *testing.T) {
-	output := runGjqSuccess(t, "does.not.exist", testDataPath("simple.json"))
+	output := runGjqSuccess(t, "does.not.exist", "tests/data/simple.json")
 	if strings.TrimSpace(output) != "" {
 		t.Errorf("expected no output for nonexistent field, got: %q", output)
 	}
@@ -70,7 +42,7 @@ func TestNonexistentFile(t *testing.T) {
 }
 
 func TestInvalidQuery(t *testing.T) {
-	cmd := runGjq("unclosed\"", testDataPath("simple.json"))
+	cmd := runGjq("unclosed\"", "tests/data/simple.json")
 	output, err := cmd.CombinedOutput()
 	if err == nil {
 		t.Fatalf("expected failure but succeeded\noutput: %s", output)
@@ -83,7 +55,7 @@ func TestInvalidQuery(t *testing.T) {
 }
 
 func TestSimpleQuery(t *testing.T) {
-	output := runGjqSuccess(t, "age", testDataPath("simple.json"), "--with-path")
+	output := runGjqSuccess(t, "age", "tests/data/simple.json", "--with-path")
 
 	lines := strings.Split(output, "\n")
 	if len(lines) < 1 {
@@ -112,35 +84,35 @@ func TestSimpleQuery(t *testing.T) {
 }
 
 func TestQuotedFieldQueryMatches(t *testing.T) {
-	output := runGjqSuccess(t, `paths."/activities"`, testDataPath("openapi_paths.json"), "--count", "--no-display")
+	output := runGjqSuccess(t, `paths."/activities"`, "tests/data/openapi_paths.json", "--count", "--no-display")
 	if !strings.Contains(output, "1") {
 		t.Errorf("expected 1 match for quoted field query, got: %q", output)
 	}
 }
 
 func TestFixedStringFindsKeyAtAnyDepth(t *testing.T) {
-	output := runGjqSuccess(t, "-F", "/activities", testDataPath("openapi_paths.json"))
+	output := runGjqSuccess(t, "-F", "/activities", "tests/data/openapi_paths.json")
 	if strings.TrimSpace(output) == "" {
 		t.Error("expected output for -F '/activities', got empty")
 	}
 }
 
 func TestFixedStringCount(t *testing.T) {
-	output := runGjqSuccess(t, "-F", "/activities", testDataPath("openapi_paths.json"), "--count", "--no-display")
+	output := runGjqSuccess(t, "-F", "/activities", "tests/data/openapi_paths.json", "--count", "--no-display")
 	if !strings.Contains(output, "1") {
 		t.Errorf("expected exactly 1 match for -F '/activities', got: %q", output)
 	}
 }
 
 func TestFixedStringNoMatch(t *testing.T) {
-	output := runGjqSuccess(t, "-F", "/nonexistent", testDataPath("openapi_paths.json"))
+	output := runGjqSuccess(t, "-F", "/nonexistent", "tests/data/openapi_paths.json")
 	if strings.TrimSpace(output) != "" {
 		t.Errorf("expected no output for nonexistent fixed string, got: %q", output)
 	}
 }
 
 func TestNoPathFlagSuppressesHeaders(t *testing.T) {
-	output := runGjqSuccess(t, "age", testDataPath("simple.json"), "--no-path")
+	output := runGjqSuccess(t, "age", "tests/data/simple.json", "--no-path")
 	if strings.Contains(output, "age:") {
 		t.Errorf("expected no path header with --no-path, got: %q", output)
 	}
@@ -150,12 +122,12 @@ func TestNoPathFlagSuppressesHeaders(t *testing.T) {
 }
 
 func TestWithPathFlagShowsHeaders(t *testing.T) {
-	output := runGjqSuccess(t, "age", testDataPath("simple.json"), "--with-path")
+	output := runGjqSuccess(t, "age", "tests/data/simple.json", "--with-path")
 	if !strings.Contains(output, "age:") {
 		t.Errorf("expected path header with --with-path, got: %q", output)
 	}
 }
 
 func TestPathFlagsAreMutuallyExclusive(t *testing.T) {
-	runGjqFailure(t, "age", testDataPath("simple.json"), "--with-path", "--no-path")
+	runGjqFailure(t, "age", "tests/data/simple.json", "--with-path", "--no-path")
 }
