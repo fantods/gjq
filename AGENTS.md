@@ -13,7 +13,24 @@ TODO
 
 ## Directory Structure
 
-TODO
+- cmd: Entry points for various subcommands in the CLI.
+- models: Structs for domain entities used across the application.
+- pkg: Shared packages that may be used by other applications.
+- vendor: Application dependencies.
+
+```
+./
+├── cmd
+│   ├── root.go
+│   ├── subcommand1.go
+│   └── subcommand2.go
+├── internal
+│   ├── fileutils
+│   └── apiutils
+├── models
+├── pkg
+└── vendor
+```
 
 ## Development Commands
 

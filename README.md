@@ -1,17 +1,10 @@
 # gjq - Go JSON Query
 
-`gjq` is a CLI tool for querying JSON using *regular path querys*
+`gjq` is a go-based CLI tool for querying JSON using *regular path querys*
 
 ## What is gjq?
 
 Think of a JSON document as a labeled graph — keys and indices form the edges, and the values are the nodes. gjq gives you a compact pattern language for describing which edges to follow, borrowing the familiar building blocks of regular expressions (alternation, wildcards, repetition) and applying them to tree traversal instead of string matching.
-
-| Pattern | Meaning |
-|---|---|
-| `.name` | **Deep scan** — locate "name" anywhere in the object hierarchy |
-| `items[*].id` | **Array wildcard** — grab every `id` from the `items` collection |
-| `(debug|trace).*` | **Branching** — collect everything nested under either key |
-| `(*|[*])*.host` | **Recursive descent through mixed types** — find "host" regardless of how many objects or arrays sit above it |
 
 Rather than chaining filters step-by-step (the approach jq takes), you write a single declarative pattern that describes your destination. Internally, the pattern is compiled into a deterministic finite automaton that walks the document in one pass.
 
@@ -83,3 +76,90 @@ $ echo '{"name":"Ada","age":36}' | gjq ''
   "age": 36
 }
 ```
+
+## Installation
+
+**TODO**
+
+## CLI Usage
+
+```
+A JSONPath-inspired query language for JSON documents
+
+Usage: gjq [OPTIONS] [QUERY] [FILE] [COMMAND]
+
+Commands:
+  generate  Generate additional documentation and/or completions
+
+Arguments:
+  [QUERY]  Query string (e.g., "**.name")
+  [FILE]   Optional path to JSON file. If omitted, reads from STDIN
+
+Options:
+  -i, --ignore-case   Case insensitive search
+      --compact       Do not pretty-print the JSON output
+      --count         Display count of number of matches
+      --depth         Display depth of the input document
+  -n, --no-display    Do not display matched JSON values
+  -F, --fixed-string  Treat the query as a literal field name and search at any depth
+      --with-path     Always print the path header, even when output is piped
+      --no-path       Never print the path header, even in a terminal
+  -h, --help          Print help (see more with '--help')
+  -V, --version       Print version
+```
+
+## Additional examples
+
+**Pluck a field from anywhere in the structure:**
+
+```bash
+curl -s https://api.nobelprize.org/v1/prize.json | gjq -F motivation | head -4
+```
+
+**Count matches silently:**
+
+```bash
+curl -s https://api.nobelprize.org/v1/prize.json | gjq -F firstname --count -n
+# Found matches: 1026
+```
+
+**Combining with standard Unix tools:**
+
+gjq adapts its output depending on whether it's writing to a terminal or a pipe — much like ripgrep's `--heading` behavior. In a terminal you get annotated paths; through a pipe you get raw values, making it straightforward to chain into `sort`, `uniq`, `wc`, and friends.
+
+```bash
+# Values only when piped — ready for downstream processing
+$ curl -s https://api.nobelprize.org/v1/prize.json | gjq -F firstname | sort | head -3
+"A. Michael"
+"Aage N."
+"Aaron"
+
+# Force path annotations on even when piped
+$ curl -s https://api.nobelprize.org/v1/prize.json | gjq -F firstname --with-path | head -4
+prizes.[0].laureates.[0].firstname:
+"Susumu"
+prizes.[0].laureates.[1].firstname:
+"Richard"
+```
+
+## Query language reference
+
+gjq queries are regular expressions applied to JSON paths rather than text. If you've used regex before, the operators will feel natural — they just operate on key and index segments instead of characters.
+
+| Operator | Syntax | Meaning |
+|---|---|---|
+| Concatenation | `foo.bar.baz` | Follow the exact path `foo` → `bar` → `baz` |
+| Alternation | `foo \| bar` | Accept either `foo` or `bar` |
+| Kleene star | `**` | Zero or more field steps |
+| Repetition | `foo*` | Repeat the preceding step zero or more times |
+| Wildcard | `*` or `[*]` | Match any single object key or array position |
+| Optional | `foo?.bar` | The `foo` step may or may not be present |
+| Field literal | `foo` or `"foo bar"` | Match a specific key (quote names containing spaces) |
+| Array indexing | `[0]` or `[1:3]` | Select a single index or an inclusive slice |
+
+Operators compose freely inside parentheses. For instance, `foo.(bar|baz).qux` expands to two valid paths: `foo.bar.qux` and `foo.baz.qux`.
+
+To descend through an arbitrary mix of objects and arrays, use `(* | [*])*` — so `(* | [*])*.foo` would locate every `foo` field no matter how deeply it's nested.
+
+Under the hood, the query engine parses expressions into an [NFA](https://en.wikipedia.org/wiki/Nondeterministic_finite_automaton), then converts that into a [DFA](https://en.wikipedia.org/wiki/Deterministic_finite_automaton) before walking the document. See the [grammar](./src/query/grammar) directory and the [`query`](./src/query) module for implementation details.
+
