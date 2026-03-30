@@ -31,7 +31,7 @@ func runGjqFailure(t *testing.T, args ...string) {
 }
 
 func TestNonexistentFieldSimpleQuery(t *testing.T) {
-	output := runGjqSuccess(t, "does.not.exist", "tests/data/simple.json")
+	output := runGjqSuccess(t, "does.not.exist", "data/simple.json")
 	if strings.TrimSpace(output) != "" {
 		t.Errorf("expected no output for nonexistent field, got: %q", output)
 	}
@@ -42,7 +42,7 @@ func TestNonexistentFile(t *testing.T) {
 }
 
 func TestInvalidQuery(t *testing.T) {
-	cmd := runGjq("unclosed\"", "tests/data/simple.json")
+	cmd := runGjq("unclosed\"", "data/simple.json")
 	output, err := cmd.CombinedOutput()
 	if err == nil {
 		t.Fatalf("expected failure but succeeded\noutput: %s", output)
@@ -55,7 +55,7 @@ func TestInvalidQuery(t *testing.T) {
 }
 
 func TestSimpleQuery(t *testing.T) {
-	output := runGjqSuccess(t, "age", "tests/data/simple.json", "--with-path")
+	output := runGjqSuccess(t, "age", "data/simple.json", "--with-path")
 
 	lines := strings.Split(output, "\n")
 	if len(lines) < 1 {
@@ -84,35 +84,35 @@ func TestSimpleQuery(t *testing.T) {
 }
 
 func TestQuotedFieldQueryMatches(t *testing.T) {
-	output := runGjqSuccess(t, `paths."/activities"`, "tests/data/openapi_paths.json", "--count", "--no-display")
+	output := runGjqSuccess(t, `paths."/activities"`, "data/openapi_paths.json", "--count", "--no-display")
 	if !strings.Contains(output, "1") {
 		t.Errorf("expected 1 match for quoted field query, got: %q", output)
 	}
 }
 
 func TestFixedStringFindsKeyAtAnyDepth(t *testing.T) {
-	output := runGjqSuccess(t, "-F", "/activities", "tests/data/openapi_paths.json")
+	output := runGjqSuccess(t, "-F", "/activities", "data/openapi_paths.json")
 	if strings.TrimSpace(output) == "" {
 		t.Error("expected output for -F '/activities', got empty")
 	}
 }
 
 func TestFixedStringCount(t *testing.T) {
-	output := runGjqSuccess(t, "-F", "/activities", "tests/data/openapi_paths.json", "--count", "--no-display")
+	output := runGjqSuccess(t, "-F", "/activities", "data/openapi_paths.json", "--count", "--no-display")
 	if !strings.Contains(output, "1") {
 		t.Errorf("expected exactly 1 match for -F '/activities', got: %q", output)
 	}
 }
 
 func TestFixedStringNoMatch(t *testing.T) {
-	output := runGjqSuccess(t, "-F", "/nonexistent", "tests/data/openapi_paths.json")
+	output := runGjqSuccess(t, "-F", "/nonexistent", "data/openapi_paths.json")
 	if strings.TrimSpace(output) != "" {
 		t.Errorf("expected no output for nonexistent fixed string, got: %q", output)
 	}
 }
 
 func TestNoPathFlagSuppressesHeaders(t *testing.T) {
-	output := runGjqSuccess(t, "age", "tests/data/simple.json", "--no-path")
+	output := runGjqSuccess(t, "age", "data/simple.json", "--no-path")
 	if strings.Contains(output, "age:") {
 		t.Errorf("expected no path header with --no-path, got: %q", output)
 	}
@@ -122,12 +122,12 @@ func TestNoPathFlagSuppressesHeaders(t *testing.T) {
 }
 
 func TestWithPathFlagShowsHeaders(t *testing.T) {
-	output := runGjqSuccess(t, "age", "tests/data/simple.json", "--with-path")
+	output := runGjqSuccess(t, "age", "data/simple.json", "--with-path")
 	if !strings.Contains(output, "age:") {
 		t.Errorf("expected path header with --with-path, got: %q", output)
 	}
 }
 
 func TestPathFlagsAreMutuallyExclusive(t *testing.T) {
-	runGjqFailure(t, "age", "tests/data/simple.json", "--with-path", "--no-path")
+	runGjqFailure(t, "age", "data/simple.json", "--with-path", "--no-path")
 }

@@ -71,32 +71,6 @@ Run `go test ./...` before committing.
 - `Query.String()` round-trip display method
 - Binary search optimization for range lookups in DFA
 
-### Phase 1: Output Formatting (`internal/output/output.go`)
-
-New package for colorized JSON output.
-
-**API:**
-- `WriteResult(w io.Writer, value interface{}, path []query.PathType, pretty, showPath, colorize bool) error` — single result (path header + JSON). Silently returns on broken pipe.
-- `writeColoredJSON(w io.Writer, value interface{}, indent int, pretty, colorize bool) error` — recursive syntax highlighting via raw ANSI escape codes.
-- `Depth(value interface{}) int` — max nesting depth for `--depth`.
-
-**Color scheme:**
-- `null` → dim red | Booleans → bold yellow | Numbers → yellow | Strings → green | Object keys → cyan | Path headers → bold magenta | Labels ("Found matches:", "Depth:") → bold blue
-
-**Rendering:** Hand-roll pretty-printer (interleave ANSI codes). Use `json.Marshal` only for individual string escaping. Accept `io.Writer` for `bufio` wrapping. Suppress color when stdout is not a terminal or `NO_COLOR` is set.
-
-### Phase 2: `Query.String()` (`internal/query/ast.go`)
-
-Round-trip display method matching reference `Display` impl:
-- `Field("foo")` → `foo` | `Field("a.b")` → `"a.b"` (quote if reserved chars/whitespace)
-- `Index(3)` → `[3]` | `Range(2,5)` → `[2:5]` | `RangeFrom(3)` → `[3:]`
-- `FieldWildcard` → `*` | `ArrayWildcard` → `[*]` | `Regex(p)` → `/p/`
-- `Optional(q)` → `q?` | `KleeneStar(q)` → `q*` (wrap in parens if inner is multi-element disjunction/sequence)
-- `Disjunction([a,b])` → `a | b`
-- `Sequence([a,b])` → `a.b` (no dot before `[...]`)
-
-Helpers: `needsQuoting(name) bool`, `escapeForQuotedField(name) string`.
-
 ### Phase 3: Wire Up CLI (`cmd/root.go`)
 
 Replace stub `runRoot()` with:

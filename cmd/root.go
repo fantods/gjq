@@ -1,10 +1,14 @@
 package cmd
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
+	"github.com/fantods/gjq/internal/output"
+	"github.com/fantods/gjq/internal/query"
 	"github.com/spf13/cobra"
 )
 
@@ -67,19 +71,64 @@ func runRoot(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("query string required")
 	}
 
+	var q query.Query
+	if flagFixedString {
+		q = query.NewSequence([]query.Query{
+			query.NewKleeneStar(query.NewDisjunction([]query.Query{
+				query.NewFieldWildcard(),
+				query.NewArrayWildcard(),
+			})),
+			query.NewField(queryStr),
+		})
+	} else {
+		var err error
+		q, err = query.ParseQuery(queryStr)
+		if err != nil {
+			fmt.Fprintln(cmd.ErrOrStderr(), err.Error())
+			return err
+		}
+	}
+
 	data, err := readInput(fileArg, cmd)
 	if err != nil {
 		return fmt.Errorf("reading input: %w", err)
 	}
 
+	root, err := query.ParseJSON(string(data))
+	if err != nil {
+		fmt.Fprintln(cmd.ErrOrStderr(), err.Error())
+		return err
+	}
+
+	dfa := query.NewQueryDFA(&q, flagIgnoreCase)
+	results := dfa.Find(root)
+
 	showPath := resolveShowPath()
+	colorize := isTerminal(os.Stdout)
 
-	_ = queryStr
-	_ = data
-	_ = showPath
+	w := bufio.NewWriterSize(cmd.OutOrStdout(), 4096)
 
-	fmt.Fprintf(cmd.OutOrStdout(), "query=%q file=%q ignoreCase=%v compact=%v count=%v depth=%v noDisplay=%v fixedString=%v withPath=%v noPath=%v\n",
-		queryStr, fileArg, flagIgnoreCase, flagCompact, flagCount, flagDepth, flagNoDisplay, flagFixedString, flagWithPath, flagNoPath)
+	if flagCount {
+		fmt.Fprintf(w, "Found matches: %d\n", len(results))
+	}
+
+	if flagDepth {
+		fmt.Fprintf(w, "Depth: %d\n", output.Depth(root))
+	}
+
+	if !flagNoDisplay {
+		pretty := !flagCompact
+		for _, result := range results {
+			output.WriteResult(w, result.Value, result.Path, pretty, showPath, colorize)
+		}
+	}
+
+	if err := w.Flush(); err != nil {
+		if strings.Contains(err.Error(), "broken pipe") {
+			return nil
+		}
+		return err
+	}
 
 	return nil
 }
