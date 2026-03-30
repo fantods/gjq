@@ -1,5 +1,11 @@
 package query
 
+import (
+	"fmt"
+	"strings"
+	"unicode"
+)
+
 type QueryKind int
 
 const (
@@ -90,4 +96,115 @@ func (q Query) Depth() int {
 	default:
 		return 1
 	}
+}
+
+func (q Query) String() string {
+	switch q.Kind {
+	case QueryField:
+		if needsQuoting(q.Field) {
+			return fmt.Sprintf(`"%s"`, escapeForQuotedField(q.Field))
+		}
+		return q.Field
+	case QueryIndex:
+		return fmt.Sprintf("[%d]", q.Index)
+	case QueryRange:
+		return fmt.Sprintf("[%d:%d]", q.Index, q.RangeEnd)
+	case QueryRangeFrom:
+		return fmt.Sprintf("[%d:]", q.Index)
+	case QueryFieldWildcard:
+		return "*"
+	case QueryArrayWildcard:
+		return "[*]"
+	case QueryRegex:
+		return fmt.Sprintf("/%s/", q.Regex)
+	case QueryOptional:
+		inner := q.Children[0]
+		if inner.Kind == QueryDisjunction || inner.Kind == QuerySequence {
+			if len(inner.Children) > 1 {
+				return fmt.Sprintf("(%s)?", inner.String())
+			}
+		}
+		return inner.String() + "?"
+	case QueryKleeneStar:
+		inner := q.Children[0]
+		if inner.Kind == QueryDisjunction || inner.Kind == QuerySequence {
+			if len(inner.Children) > 1 {
+				return fmt.Sprintf("(%s)*", inner.String())
+			}
+		}
+		return inner.String() + "*"
+	case QueryDisjunction:
+		parts := make([]string, len(q.Children))
+		for i, c := range q.Children {
+			parts[i] = c.String()
+		}
+		return strings.Join(parts, " | ")
+	case QuerySequence:
+		if len(q.Children) == 0 {
+			return ""
+		}
+		var buf strings.Builder
+		for i, child := range q.Children {
+			if i > 0 {
+				inner := unwrapModifier(child)
+				prevInner := unwrapModifier(q.Children[i-1])
+				if prevInner.Kind != QueryField || !isBracketAccess(inner) {
+					buf.WriteByte('.')
+				}
+			}
+			if child.Kind == QueryDisjunction {
+				buf.WriteByte('(')
+				buf.WriteString(child.String())
+				buf.WriteByte(')')
+			} else {
+				buf.WriteString(child.String())
+			}
+		}
+		return buf.String()
+	default:
+		return ""
+	}
+}
+
+func unwrapModifier(q Query) Query {
+	if q.Kind == QueryOptional || q.Kind == QueryKleeneStar {
+		return q.Children[0]
+	}
+	return q
+}
+
+func isBracketAccess(q Query) bool {
+	switch q.Kind {
+	case QueryIndex, QueryRange, QueryRangeFrom, QueryFieldWildcard, QueryArrayWildcard:
+		return true
+	}
+	return false
+}
+
+func needsQuoting(name string) bool {
+	if name == "" {
+		return true
+	}
+	for _, r := range name {
+		if isReserved(r) || unicode.IsSpace(r) || r == '"' || r == '\\' {
+			return true
+		}
+	}
+	return false
+}
+
+func escapeForQuotedField(name string) string {
+	var buf strings.Builder
+	buf.Grow(len(name))
+	for _, r := range name {
+		switch r {
+		case '"':
+			buf.WriteString(`\"`)
+		case '\\':
+			buf.WriteString(`\\`)
+		default:
+			buf.WriteRune(r)
+		}
+	}
+	return buf.String()
 }

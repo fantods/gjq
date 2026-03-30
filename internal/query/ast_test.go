@@ -1,6 +1,8 @@
 package query
 
-import "testing"
+import (
+	"testing"
+)
 
 func TestNewField(t *testing.T) {
 	q := NewField("foo")
@@ -142,5 +144,207 @@ func TestQueryDepthOptional(t *testing.T) {
 	q := NewOptional(NewField("foo"))
 	if d := q.Depth(); d != 2 {
 		t.Fatalf("expected depth 2 for optional over atom, got %d", d)
+	}
+}
+
+func TestNeedsQuoting(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want bool
+	}{
+		{"simple", "foo", false},
+		{"alphanumeric", "foo123", false},
+		{"underscore", "foo_bar", false},
+		{"empty", "", true},
+		{"dot", "a.b", true},
+		{"pipe", "a|b", true},
+		{"star", "a*b", true},
+		{"question", "a?b", true},
+		{"bracket_open", "a[b", true},
+		{"bracket_close", "a]b", true},
+		{"paren_open", "a(b", true},
+		{"paren_close", "a)b", true},
+		{"slash", "a/b", true},
+		{"double_quote", `a"b`, true},
+		{"backslash", `a\b`, true},
+		{"space", "a b", true},
+		{"tab", "a\tb", true},
+		{"newline", "a\nb", true},
+		{"reserved chars all", ".|*?[]()/", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := needsQuoting(tt.in); got != tt.want {
+				t.Errorf("needsQuoting(%q) = %v, want %v", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestEscapeForQuotedField(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"plain", "foo", "foo"},
+		{"double_quote", `a"b`, `a\"b`},
+		{"backslash", `a\b`, `a\\b`},
+		{"both", `a\"b`, `a\\\"b`},
+		{"empty", "", ""},
+		{"other_reserved", ".|*?[]()/", ".|*?[]()/"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := escapeForQuotedField(tt.in); got != tt.want {
+				t.Errorf("escapeForQuotedField(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestQueryString_individualNodes(t *testing.T) {
+	tests := []struct {
+		name string
+		q    Query
+		want string
+	}{
+		{"field", NewField("foo"), "foo"},
+		{"field needs quoting", NewField("a.b"), `"a.b"`},
+		{"field with slash", NewField("/activities"), `"/activities"`},
+		{"field empty", NewField(""), `""`},
+		{"index", NewIndex(3), "[3]"},
+		{"index zero", NewIndex(0), "[0]"},
+		{"range", NewRange(2, 5), "[2:5]"},
+		{"range from", NewRangeFrom(3), "[3:]"},
+		{"range from zero", NewRangeFrom(0), "[0:]"},
+		{"field wildcard", NewFieldWildcard(), "*"},
+		{"array wildcard", NewArrayWildcard(), "[*]"},
+		{"regex", NewRegex("foo.bar"), "/foo.bar/"},
+		{"regex empty", NewRegex(""), "//"},
+		{"optional field", NewOptional(NewField("foo")), "foo?"},
+		{"kleene field", NewKleeneStar(NewField("a")), "a*"},
+		{"disjunction two fields", NewDisjunction([]Query{NewField("foo"), NewField("bar")}), "foo | bar"},
+		{"sequence two fields", NewSequence([]Query{NewField("foo"), NewField("bar")}), "foo.bar"},
+		{"optional disjunction multi", NewOptional(NewDisjunction([]Query{NewField("a"), NewField("b")})), "(a | b)?"},
+		{"optional disjunction single", NewOptional(NewDisjunction([]Query{NewField("a")})), "a?"},
+		{"kleene sequence multi", NewKleeneStar(NewSequence([]Query{NewField("a"), NewField("b")})), "(a.b)*"},
+		{"kleene sequence single", NewKleeneStar(NewSequence([]Query{NewField("a")})), "a*"},
+		{"optional index", NewOptional(NewIndex(0)), "[0]?"},
+		{"kleene disjunction", NewKleeneStar(NewDisjunction([]Query{NewFieldWildcard(), NewArrayWildcard()})), "(* | [*])*"},
+		{"empty sequence", NewSequence(nil), ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.q.String()
+			if got != tt.want {
+				t.Errorf("String() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestQueryString_sequenceDotSuppression(t *testing.T) {
+	tests := []struct {
+		name string
+		q    Query
+		want string
+	}{
+		{"field then index", NewSequence([]Query{NewField("foo"), NewIndex(3)}), "foo[3]"},
+		{"field then range", NewSequence([]Query{NewField("foo"), NewRange(1, 3)}), "foo[1:3]"},
+		{"field then range from", NewSequence([]Query{NewField("foo"), NewRangeFrom(2)}), "foo[2:]"},
+		{"field then field wildcard", NewSequence([]Query{NewField("foo"), NewFieldWildcard()}), "foo*"},
+		{"field then array wildcard", NewSequence([]Query{NewField("foo"), NewArrayWildcard()}), "foo[*]"},
+		{"index then field", NewSequence([]Query{NewIndex(0), NewField("bar")}), "[0].bar"},
+		{"field index field", NewSequence([]Query{NewField("foo"), NewIndex(0), NewField("bar")}), "foo[0].bar"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.q.String()
+			if got != tt.want {
+				t.Errorf("String() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestQueryString_sequenceWithDisjunction(t *testing.T) {
+	q := NewSequence([]Query{
+		NewDisjunction([]Query{NewField("foo"), NewField("bar")}),
+		NewField("baz"),
+	})
+	want := "(foo | bar).baz"
+	if got := q.String(); got != want {
+		t.Errorf("String() = %q, want %q", got, want)
+	}
+}
+
+func TestQueryString_roundTrip(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"field", "foo", "foo"},
+		{"field and index", "foo123[42]", "foo123[42]"},
+		{"regex", "/foo.bar/", "/foo.bar/"},
+		{"disjunction", "foo | bar", "foo | bar"},
+		{"kleene", "a*", "a*"},
+		{"optional", "b?", "b?"},
+		{"complex", "foo.bar[0]?.baz*", "foo.bar[0]?.baz*"},
+		{"multiple optional", "c*.c?.c?", "c*.c?.c?"},
+		{"disjunction group in sequence", "(foo | bar).baz", "(foo | bar).baz"},
+		{"any path group", "(* | [*])*", "(* | [*])*"},
+		{"any path in query", "a.(* | [*])*.b?", "a.(* | [*])*.b?"},
+		{"nested groups", "((foo.bar)* | bar)", "(foo.bar)* | bar"},
+		{"group sequence optional", "(foo.bar.baz)?", "(foo.bar.baz)?"},
+		{"empty", "", ""},
+		{"reserved in quotes", `".|*?[]()/"`, `".|*?[]()/"`},
+		{"group reserved", `"." | "|" | "*" | "?" | "[" | "]" | "(" | ")" | "/"`, `"." | "|" | "*" | "?" | "[" | "]" | "(" | ")" | "/"`},
+		{"key with spaces", `"key space".foo`, `"key space".foo`},
+		{"dot in field", `"a.b"`, `"a.b"`},
+		{"backslash in field", `"a\\b"`, `"a\\b"`},
+		{"inner quote in field", `"a\"b"`, `"a\"b"`},
+		{"quoted field in sequence", `paths."/activities"`, `paths."/activities"`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			q, err := ParseQuery(tt.input)
+			if err != nil {
+				t.Fatalf("ParseQuery(%q) error: %v", tt.input, err)
+			}
+			got := q.String()
+			if got != tt.want {
+				t.Errorf("ParseQuery(%q).String() = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestQueryString_nestedGroupsTrivial(t *testing.T) {
+	q, err := ParseQuery("((foo))")
+	if err != nil {
+		t.Fatalf("ParseQuery error: %v", err)
+	}
+	want := "foo"
+	if got := q.String(); got != want {
+		t.Errorf("String() = %q, want %q", got, want)
+	}
+}
+
+func TestQueryString_unicodeEscape(t *testing.T) {
+	q, err := ParseQuery(`"\u0041"`)
+	if err != nil {
+		t.Fatalf("ParseQuery error: %v", err)
+	}
+	want := "A"
+	if got := q.String(); got != want {
+		t.Errorf("String() = %q, want %q", got, want)
 	}
 }
