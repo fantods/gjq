@@ -1,6 +1,7 @@
 package query
 
 import (
+	"bytes"
 	"encoding/json"
 	"math"
 	"sort"
@@ -63,10 +64,15 @@ func (d *QueryDFA) FieldSymbolID(field string) int {
 }
 
 func (d *QueryDFA) IndexSymbolID(index int) (int, bool) {
-	for _, re := range d.Ranges {
-		if re.Start <= index && index < re.End {
-			return re.SymbolID, true
-		}
+	i := sort.Search(len(d.Ranges), func(i int) bool {
+		return d.Ranges[i].Start > index
+	})
+	if i == 0 {
+		return 0, false
+	}
+	re := d.Ranges[i-1]
+	if index < re.End {
+		return re.SymbolID, true
 	}
 	return 0, false
 }
@@ -88,7 +94,7 @@ func (d *QueryDFA) IsAcceptingState(state int) bool {
 
 func (d *QueryDFA) Find(root interface{}) []JSONPointer {
 	var results []JSONPointer
-	var path []PathType
+	path := make([]PathType, 0, 16)
 	d.traverse(d.StartState, path, root, &results)
 	return results
 }
@@ -349,6 +355,16 @@ func FindWithQuery(root interface{}, queryStr string, caseInsensitive bool) ([]J
 func ParseJSON(input string) (interface{}, error) {
 	var result interface{}
 	dec := json.NewDecoder(strings.NewReader(input))
+	dec.UseNumber()
+	if err := dec.Decode(&result); err != nil {
+		return nil, err
+	}
+	return convertNumbers(result), nil
+}
+
+func ParseJSONFromBytes(data []byte) (interface{}, error) {
+	var result interface{}
+	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.UseNumber()
 	if err := dec.Decode(&result); err != nil {
 		return nil, err

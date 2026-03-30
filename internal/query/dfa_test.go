@@ -1,7 +1,9 @@
 package query
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -618,4 +620,320 @@ func TestDFACaseInsensitiveRecursiveWildcard(t *testing.T) {
 	if len(results) != 2 {
 		t.Fatalf("expected 2 matches, got %d", len(results))
 	}
+}
+
+func TestDFAIndexSymbolIDBinarySearchCorrectness(t *testing.T) {
+	q := mustParseQuery(t, "a[0:10] | a[5:20] | a[15:100]")
+	dfa := NewQueryDFA(&q, false)
+
+	type expectation struct {
+		index       int
+		wantOK      bool
+		wantNonZero bool
+	}
+	cases := []expectation{
+		{0, true, true},
+		{1, true, true},
+		{9, true, true},
+		{10, true, true},
+		{19, true, true},
+		{50, true, true},
+		{99, true, true},
+		{100, false, false},
+		{200, false, false},
+	}
+	for _, tc := range cases {
+		id, ok := dfa.IndexSymbolID(tc.index)
+		if ok != tc.wantOK {
+			t.Errorf("index %d: got ok=%v, want %v", tc.index, ok, tc.wantOK)
+		}
+		if tc.wantNonZero && ok && id == 0 {
+			t.Errorf("index %d: expected non-zero symbol id", tc.index)
+		}
+	}
+
+	for i := 0; i < 100; i++ {
+		id, ok := dfa.IndexSymbolID(i)
+		if !ok {
+			t.Errorf("index %d should be in some range", i)
+		}
+		if id == 0 {
+			t.Errorf("index %d should have non-zero symbol id", i)
+		}
+	}
+}
+
+func TestDFAIndexSymbolIDBinarySearchOverlappingRanges(t *testing.T) {
+	q := mustParseQuery(t, "x[0:3] | x[2:5] | x[4:8]")
+	dfa := NewQueryDFA(&q, false)
+
+	for i := 0; i < 8; i++ {
+		id, ok := dfa.IndexSymbolID(i)
+		if !ok {
+			t.Fatalf("index %d: expected to be found", i)
+		}
+		if id == 0 {
+			t.Fatalf("index %d: expected non-zero symbol id", i)
+		}
+	}
+	id, ok := dfa.IndexSymbolID(8)
+	if ok && id != 0 {
+		t.Fatalf("index 8 should not be in any range")
+	}
+	id, ok = dfa.IndexSymbolID(-1)
+	if ok && id != 0 {
+		t.Fatalf("index -1 should not be in any range")
+	}
+}
+
+func TestDFAIndexSymbolIDBinarySearchSingleRange(t *testing.T) {
+	q := mustParseQuery(t, "a[3:7]")
+	dfa := NewQueryDFA(&q, false)
+
+	for i := 3; i < 7; i++ {
+		id, ok := dfa.IndexSymbolID(i)
+		if !ok || id == 0 {
+			t.Fatalf("index %d: expected in range [3,7)", i)
+		}
+	}
+	for _, idx := range []int{0, 1, 2, 7, 8, 100} {
+		id, ok := dfa.IndexSymbolID(idx)
+		if ok && id != 0 {
+			t.Fatalf("index %d: should not be in range [3,7)", idx)
+		}
+	}
+}
+
+func TestDFAIndexSymbolIDBinarySearchArrayWildcard(t *testing.T) {
+	q := mustParseQuery(t, "a[*]")
+	dfa := NewQueryDFA(&q, false)
+
+	for _, idx := range []int{0, 1, 50, 9999} {
+		id, ok := dfa.IndexSymbolID(idx)
+		if !ok || id == 0 {
+			t.Fatalf("index %d: expected in wildcard range", idx)
+		}
+	}
+}
+
+func BenchmarkIndexSymbolID(b *testing.B) {
+	q := mustParseQueryB(b, "a[0:10] | a[5:50] | a[40:200] | a[150:500] | a[400:1000]")
+	dfa := NewQueryDFA(&q, false)
+
+	indices := make([]int, 1000)
+	for i := range indices {
+		indices[i] = i
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		for _, idx := range indices {
+			dfa.IndexSymbolID(idx)
+		}
+	}
+}
+
+func mustParseQueryB(b *testing.B, input string) Query {
+	q, err := ParseQuery(input)
+	if err != nil {
+		b.Fatalf("failed to parse query %q: %v", input, err)
+	}
+	return q
+}
+
+func TestParseJSONFromBytesEquivalence(t *testing.T) {
+	inputs := []string{
+		`{"a": 1, "b": "hello"}`,
+		`[1, 2, 3, "four", null, true, false]`,
+		`{"nested": {"deep": {"val": 42.5}}}`,
+		`{"num": 42, "float": 3.14, "big": 999999999999}`,
+		`null`,
+		`42`,
+		`"hello"`,
+		`[]`,
+		`{}`,
+	}
+	for _, input := range inputs {
+		resultStr, err := ParseJSON(input)
+		if err != nil {
+			t.Fatalf("ParseJSON(%q) error: %v", input, err)
+		}
+		resultBytes, err := ParseJSONFromBytes([]byte(input))
+		if err != nil {
+			t.Fatalf("ParseJSONFromBytes(%q) error: %v", input, err)
+		}
+		if fmt.Sprintf("%v", resultStr) != fmt.Sprintf("%v", resultBytes) {
+			t.Errorf("ParseJSON and ParseJSONFromBytes returned different results for %q:\n  string: %v\n  bytes:  %v", input, resultStr, resultBytes)
+		}
+	}
+}
+
+func TestParseJSONFromBytesNumberConversion(t *testing.T) {
+	input := `{"int_val": 42, "float_val": 3.14, "big_int": 999999999999}`
+	result, err := ParseJSONFromBytes([]byte(input))
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := result.(map[string]interface{})
+	if v, ok := m["int_val"].(int); !ok || v != 42 {
+		t.Fatalf("expected int 42, got %v", m["int_val"])
+	}
+	if v, ok := m["float_val"].(float64); !ok || v != 3.14 {
+		t.Fatalf("expected float64 3.14, got %v", m["float_val"])
+	}
+}
+
+func BenchmarkParseJSONString(b *testing.B) {
+	var buf bytes.Buffer
+	buf.WriteString(`{"items": [`)
+	for i := 0; i < 1000; i++ {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		fmt.Fprintf(&buf, `{"id": %d, "name": "item_%d", "value": %.1f}`, i, i, float64(i)*1.1)
+	}
+	buf.WriteString(`]}`)
+	data := buf.String()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := ParseJSON(data)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkParseJSONBytes(b *testing.B) {
+	var buf bytes.Buffer
+	buf.WriteString(`{"items": [`)
+	for i := 0; i < 1000; i++ {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		fmt.Fprintf(&buf, `{"id": %d, "name": "item_%d", "value": %.1f}`, i, i, float64(i)*1.1)
+	}
+	buf.WriteString(`]}`)
+	data := buf.Bytes()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := ParseJSONFromBytes(data)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+var deepJSON = `{
+  "l1": {
+    "l2": {
+      "l3": {
+        "l4": {
+          "l5": {
+            "l6": {
+              "l7": {
+                "l8": {
+                  "l9": {
+                    "l10": "deep_value"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}`
+
+func TestDFAFindDeepPathCorrectness(t *testing.T) {
+	root := mustParseJSON(t, deepJSON)
+	q := mustParseQuery(t, "l1.l2.l3.l4.l5.l6.l7.l8.l9.l10")
+	dfa := NewQueryDFA(&q, false)
+	results := dfa.Find(root)
+	if len(results) != 1 {
+		t.Fatalf("expected 1 match, got %d", len(results))
+	}
+	if len(results[0].Path) != 10 {
+		t.Fatalf("expected path length 10, got %d", len(results[0].Path))
+	}
+	if results[0].Value != "deep_value" {
+		t.Fatalf("expected 'deep_value', got %v", results[0].Value)
+	}
+	expected := []string{"l1", "l2", "l3", "l4", "l5", "l6", "l7", "l8", "l9", "l10"}
+	for i, pt := range results[0].Path {
+		if pt.Field != expected[i] {
+			t.Errorf("path[%d]: expected %q, got %q", i, expected[i], pt.Field)
+		}
+	}
+}
+
+func TestDFAFindMultipleDeepPaths(t *testing.T) {
+	input := `{
+	  "a": { "b": { "c": { "target": 1 } } },
+	  "x": { "y": { "z": { "target": 2 } } }
+	}`
+	root := mustParseJSON(t, input)
+	q := mustParseQuery(t, "*.*.*.target")
+	dfa := NewQueryDFA(&q, false)
+	results := dfa.Find(root)
+	if len(results) != 2 {
+		t.Fatalf("expected 2 matches, got %d", len(results))
+	}
+	vals := map[int]bool{}
+	for _, r := range results {
+		if v, ok := r.Value.(int); ok {
+			vals[v] = true
+		}
+	}
+	if !vals[1] || !vals[2] {
+		t.Fatalf("expected values 1 and 2, got %v", vals)
+	}
+	for _, r := range results {
+		if len(r.Path) != 4 {
+			t.Errorf("expected path length 4, got %d: %v", len(r.Path), r.Path)
+		}
+	}
+}
+
+func BenchmarkDFAFind(b *testing.B) {
+	root := mustParseAnyJSONB(b, deepJSON)
+	q := mustParseQueryB(b, "l1.l2.l3.l4.l5.l6.l7.l8.l9.l10")
+	dfa := NewQueryDFA(&q, false)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		dfa.Find(root)
+	}
+}
+
+func BenchmarkDFAFindWildcard(b *testing.B) {
+	input := `{"items": [`
+	for i := 0; i < 100; i++ {
+		if i > 0 {
+			input += ", "
+		}
+		input += fmt.Sprintf(`{"name": "item_%d", "tags": ["a", "b", "c"]}`, i)
+	}
+	input += `]}`
+	root := mustParseAnyJSONB(b, input)
+	q := mustParseQueryB(b, "items[*].tags[*]")
+	dfa := NewQueryDFA(&q, false)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		dfa.Find(root)
+	}
+}
+
+func mustParseAnyJSONB(b *testing.B, input string) interface{} {
+	b.Helper()
+	var result interface{}
+	dec := json.NewDecoder(strings.NewReader(input))
+	dec.UseNumber()
+	if err := dec.Decode(&result); err != nil {
+		b.Fatalf("failed to parse JSON: %v", err)
+	}
+	return convertNumbers(result)
 }

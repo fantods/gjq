@@ -94,7 +94,7 @@ func runRoot(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("reading input: %w", err)
 	}
 
-	root, err := query.ParseJSON(string(data))
+	root, err := query.ParseJSONFromBytes(data)
 	if err != nil {
 		fmt.Fprintln(cmd.ErrOrStderr(), err.Error())
 		return err
