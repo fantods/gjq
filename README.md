@@ -85,7 +85,30 @@ $ echo '{"name":"Ada","age":36}' | gjq ''
 
 ## Installation
 
-**TODO**
+### go install (recommended)
+
+Requires [Go 1.21+](https://go.dev/dl/).
+
+```bash
+go install github.com/fantods/gjq@latest
+```
+
+This places a `gjq` binary in `$GOPATH/bin` (or `$HOME/go/bin` by default). Make sure that directory is on your `PATH`.
+
+### Build from source
+
+```bash
+git clone https://github.com/fantods/gjq.git
+cd gjq
+go build -o gjq .
+```
+
+### Verify
+
+```bash
+gjq --version
+# gjq version 0.1.0
+```
 
 ## CLI Usage
 
@@ -120,6 +143,10 @@ Options:
 
 ```bash
 curl -s https://api.nobelprize.org/v1/prize.json | gjq -F motivation | head -4
+"\"for the development of metal–organic frameworks\""
+"\"for the development of metal–organic frameworks\""
+"\"for the development of metal–organic frameworks\""
+"\"for having identified the prerequisites for sustained growth through technological progress\""
 ```
 
 **Count matches silently:**
