@@ -2,6 +2,12 @@
 
 `gjq` is a go-based CLI tool for querying JSON using *regular path queries*
 
+<p align="center">
+  <img src="./images/sample.png" alt="go json query colored output example" width="700"/>
+</p>
+
+
+
 ## What is gjq?
 
 Think of a JSON document as a labeled graph — keys and indices form the edges, and the values are the nodes. gjq gives you a compact pattern language for describing which edges to follow, borrowing the familiar building blocks of regular expressions (alternation, wildcards, repetition) and applying them to tree traversal instead of string matching.
