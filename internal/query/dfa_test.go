@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 )
@@ -936,4 +937,87 @@ func mustParseAnyJSONB(b *testing.B, input string) interface{} {
 		b.Fatalf("failed to parse JSON: %v", err)
 	}
 	return convertNumbers(result)
+}
+
+func loadNobelPrizeJSON(b *testing.B) interface{} {
+	b.Helper()
+	data, err := os.ReadFile("../../tests/data/nobel_prizes.json")
+	if err != nil {
+		b.Fatalf("failed to load nobel_prizes.json: %v", err)
+	}
+	root, err := ParseJSONFromBytes(data)
+	if err != nil {
+		b.Fatalf("failed to parse nobel_prizes.json: %v", err)
+	}
+	return root
+}
+
+func BenchmarkNobelParse(b *testing.B) {
+	data, err := os.ReadFile("../../tests/data/nobel_prizes.json")
+	if err != nil {
+		b.Fatalf("failed to load nobel_prizes.json: %v", err)
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := ParseJSONFromBytes(data)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkNobelFindCategories(b *testing.B) {
+	root := loadNobelPrizeJSON(b)
+	q := mustParseQueryB(b, "prizes[*].category")
+	dfa := NewQueryDFA(&q, false)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		dfa.Find(root)
+	}
+}
+
+func BenchmarkNobelFindSurnames(b *testing.B) {
+	root := loadNobelPrizeJSON(b)
+	q := mustParseQueryB(b, "prizes[*].laureates[*].surname")
+	dfa := NewQueryDFA(&q, false)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		dfa.Find(root)
+	}
+}
+
+func BenchmarkNobelFindRecursive(b *testing.B) {
+	root := loadNobelPrizeJSON(b)
+	q := mustParseQueryB(b, "**.firstname")
+	dfa := NewQueryDFA(&q, false)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		dfa.Find(root)
+	}
+}
+
+func BenchmarkNobelFindCaseInsensitive(b *testing.B) {
+	root := loadNobelPrizeJSON(b)
+	q := mustParseQueryB(b, "**.firstname")
+	dfa := NewQueryDFA(&q, true)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		dfa.Find(root)
+	}
+}
+
+func BenchmarkNobelFindFixedString(b *testing.B) {
+	root := loadNobelPrizeJSON(b)
+	q := NewSequence([]Query{
+		NewKleeneStar(NewDisjunction([]Query{
+			NewFieldWildcard(),
+			NewArrayWildcard(),
+		})),
+		NewField("motivation"),
+	})
+	dfa := NewQueryDFA(&q, false)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		dfa.Find(root)
+	}
 }

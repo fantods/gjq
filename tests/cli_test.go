@@ -131,3 +131,87 @@ func TestWithPathFlagShowsHeaders(t *testing.T) {
 func TestPathFlagsAreMutuallyExclusive(t *testing.T) {
 	runGjqFailure(t, "age", "data/simple.json", "--with-path", "--no-path")
 }
+
+func TestCountFlag(t *testing.T) {
+	output := runGjqSuccess(t, "age", "data/simple.json", "--count", "--no-display")
+	if !strings.Contains(output, "Found matches: 1") {
+		t.Errorf("expected 'Found matches: 1', got: %q", output)
+	}
+	if strings.Contains(output, "32") {
+		t.Errorf("expected no value output with --count --no-display, got: %q", output)
+	}
+}
+
+func TestNoDisplayFlag(t *testing.T) {
+	output := runGjqSuccess(t, "age", "data/simple.json", "--no-display")
+	if strings.TrimSpace(output) != "" {
+		t.Errorf("expected no output with --no-display, got: %q", output)
+	}
+}
+
+func TestCountWithNoDisplay(t *testing.T) {
+	output := runGjqSuccess(t, "age", "data/simple.json", "--count", "--no-display")
+	if !strings.Contains(output, "Found matches: 1") {
+		t.Errorf("expected count line, got: %q", output)
+	}
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	if len(lines) != 1 {
+		t.Errorf("expected exactly 1 line (count only), got %d lines: %q", len(lines), output)
+	}
+}
+
+func TestDepthFlag(t *testing.T) {
+	output := runGjqSuccess(t, "--depth", "--no-display", "*", "data/nested.json")
+	if !strings.Contains(output, "Depth: 5") {
+		t.Errorf("expected 'Depth: 5', got: %q", output)
+	}
+}
+
+func TestDepthFlagSimple(t *testing.T) {
+	output := runGjqSuccess(t, "--depth", "--no-display", "*", "data/simple.json")
+	if !strings.Contains(output, "Depth: 3") {
+		t.Errorf("expected 'Depth: 3', got: %q", output)
+	}
+}
+
+func TestCompactFlag(t *testing.T) {
+	output := runGjqSuccess(t, "name", "data/simple.json", "--compact", "--no-path")
+	if strings.Contains(output, "\n  ") {
+		t.Errorf("compact output should not contain indented newlines, got: %q", output)
+	}
+	var parsed interface{}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(output)), &parsed); err != nil {
+		t.Fatalf("output should be valid JSON: %v\noutput: %q", err, output)
+	}
+}
+
+func TestIgnoreCaseFlag(t *testing.T) {
+	output := runGjqSuccess(t, "-i", "users[*].address", "data/nested.json", "--with-path")
+	if !strings.Contains(output, "Address:") {
+		t.Errorf("expected case-insensitive match on 'Address', got: %q", output)
+	}
+}
+
+func TestFixedStringMultipleMatches(t *testing.T) {
+	output := runGjqSuccess(t, "-F", "name", "data/nested.json", "--count", "--no-display")
+	if !strings.Contains(output, "Found matches: 2") {
+		t.Errorf("expected 2 matches for -F 'name', got: %q", output)
+	}
+}
+
+func TestLargeFileWildcardQuery(t *testing.T) {
+	output := runGjqSuccess(t, "prizes[*].category", "data/nobel_prizes.json", "--count", "--no-display")
+	if !strings.Contains(output, "Found matches: 682") {
+		t.Errorf("expected 682 prize categories, got: %q", output)
+	}
+}
+
+func TestLargeFileDeepQuery(t *testing.T) {
+	output := runGjqSuccess(t, "prizes[0].laureates[*].surname", "data/nobel_prizes.json", "--with-path")
+	if strings.TrimSpace(output) == "" {
+		t.Error("expected output for deep query into Nobel Prize data, got empty")
+	}
+	if !strings.Contains(output, "Kitagawa") {
+		t.Errorf("expected 'Kitagawa' in output, got: %q", output)
+	}
+}

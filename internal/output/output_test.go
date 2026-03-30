@@ -2,6 +2,7 @@ package output
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
@@ -403,5 +404,52 @@ func TestWriteColoredJSON_mixedNested(t *testing.T) {
 	}
 	if !strings.Contains(got, `"hello"`) {
 		t.Error("missing hello string")
+	}
+}
+
+func TestWriteResult_pathWithCompact(t *testing.T) {
+	path := []query.PathType{
+		{Kind: query.PathField, Field: "users"},
+		{Kind: query.PathIndex, Index: 0},
+	}
+	value := map[string]interface{}{"name": "Alice", "age": int(30)}
+	var buf bytes.Buffer
+	err := WriteResult(&buf, value, path, false, true, false)
+	if err != nil {
+		t.Fatalf("error: %v", err)
+	}
+	got := stripAnsi(buf.String())
+	if !strings.HasPrefix(got, "users.[0]:\n") {
+		t.Errorf("expected path header, got: %q", got)
+	}
+	jsonPart := strings.TrimPrefix(got, "users.[0]:\n")
+	jsonPart = strings.TrimSuffix(jsonPart, "\n")
+	if strings.Contains(jsonPart, "\n") {
+		t.Errorf("compact mode should produce single-line JSON, got: %q", jsonPart)
+	}
+	var parsed interface{}
+	if err := json.Unmarshal([]byte(jsonPart), &parsed); err != nil {
+		t.Fatalf("value should be valid JSON: %v\n%q", err, jsonPart)
+	}
+}
+
+func TestWriteResult_multipleResults(t *testing.T) {
+	var buf bytes.Buffer
+	path1 := []query.PathType{{Kind: query.PathField, Field: "a"}}
+	err := WriteResult(&buf, int(1), path1, true, true, false)
+	if err != nil {
+		t.Fatalf("error: %v", err)
+	}
+	path2 := []query.PathType{{Kind: query.PathField, Field: "b"}}
+	err = WriteResult(&buf, int(2), path2, true, true, false)
+	if err != nil {
+		t.Fatalf("error: %v", err)
+	}
+	got := stripAnsi(buf.String())
+	if !strings.Contains(got, "a:\n1\n") {
+		t.Errorf("missing first result in %q", got)
+	}
+	if !strings.Contains(got, "b:\n2\n") {
+		t.Errorf("missing second result in %q", got)
 	}
 }

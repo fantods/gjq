@@ -1,0 +1,10 @@
+{
+  "users": [
+    {"name": "Alice", "Address": {"City": "NYC"}},
+    {"name": "Bob", "Address": {"City": "LA"}}
+  ],
+  "metadata": {
+    "Name": "test",
+    "deep": {"deep": {"deep": "value"}}
+  }
+}

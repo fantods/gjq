@@ -348,3 +348,31 @@ func TestQueryString_unicodeEscape(t *testing.T) {
 		t.Errorf("String() = %q, want %q", got, want)
 	}
 }
+
+func TestQueryString_FixedStringConstructed(t *testing.T) {
+	q := NewSequence([]Query{
+		NewKleeneStar(NewDisjunction([]Query{
+			NewFieldWildcard(),
+			NewArrayWildcard(),
+		})),
+		NewField("mykey"),
+	})
+	want := "(* | [*])*.mykey"
+	if got := q.String(); got != want {
+		t.Errorf("Fixed-string constructed query.String() = %q, want %q", got, want)
+	}
+}
+
+func TestQueryString_FixedStringWithSpecialChars(t *testing.T) {
+	q := NewSequence([]Query{
+		NewKleeneStar(NewDisjunction([]Query{
+			NewFieldWildcard(),
+			NewArrayWildcard(),
+		})),
+		NewField("/activities"),
+	})
+	want := `(* | [*])*."/activities"`
+	if got := q.String(); got != want {
+		t.Errorf("String() = %q, want %q", got, want)
+	}
+}
