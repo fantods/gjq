@@ -142,6 +142,44 @@ prizes.[0].laureates.[1].firstname:
 "Richard"
 ```
 
+## Benchmark
+
+CLI wall-clock time comparing `gjq` to `jq` on test data (median of 20 iterations). Run with `./bench/bench.sh --chart`.
+
+```
+gjq  gjq version 0.1.0
+jq   jq-1.8.1
+Iterations: 20
+
+Benchmark                      |   gjq (ms) |    jq (ms) |  Speedup
+------------------------------------------------------------------------
+prizes.category                |     4.72ms |     5.27ms |    1.12x
+prizes.laureates.surname       |     5.22ms |     5.36ms |    1.03x
+recursive firstname            |     2.49ms |     2.54ms |    1.02x
+recursive motivation (-F)      |     2.42ms |     2.41ms |    1.00x
+prizes.laureates.share         |     4.89ms |     5.02ms |    1.03x
+case-insensitive firstname     |     2.28ms |     2.48ms |    1.09x
+simple: name                   |     2.37ms |     3.03ms |    1.28x
+simple: name.first             |     2.50ms |     2.91ms |    1.16x
+simple: hobbies[0]             |     2.36ms |     3.00ms |    1.27x
+simple: wildcard *             |     2.38ms |     2.90ms |    1.22x
+nested: users[*].name          |     2.50ms |     3.01ms |    1.20x
+nested: deep recursive         |     2.26ms |     2.53ms |    1.12x
+openapi: *.*.summary           |     2.93ms |     3.70ms |    1.26x
+```
+
+**Query details** (nobel_prizes.json, 227 KB):
+
+| Benchmark | gjq | jq |
+|---|---|---|
+| `prizes.category` | `prizes[*].category` | `.prizes[].category` |
+| `prizes.laureates.surname` | `prizes[*].laureates[*].surname` | `.prizes[].laureates[].surname` |
+| `recursive firstname` | `**.firstname` | `[.. \| .firstname? // empty]` |
+| `recursive motivation (-F)` | `-F motivation` | `[.. \| .motivation? // empty]` |
+| `prizes.laureates.share` | `prizes[*].laureates[*].share` | `.prizes[].laureates[].share` |
+| `case-insensitive firstname` | `-i **.Firstname` | `[.. \| .firstname? // empty]` |
+
+
 ## Query language reference
 
 gjq queries are regular expressions applied to JSON paths rather than text. If you've used regex before, the operators will feel natural — they just operate on key and index segments instead of characters.
