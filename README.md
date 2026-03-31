@@ -22,55 +22,61 @@ jq's pipeline model is expressive, but simple "find this field" queries often re
 
 ```bash
 # gjq — the -F flag treats the argument as a plain field name and searches the entire tree
-$ curl -s https://api.nobelprize.org/v1/prize.json | gjq -F firstname | head -6
-prizes.[0].laureates.[0].firstname:
-"Susumu"
-prizes.[0].laureates.[1].firstname:
-"Richard"
-prizes.[0].laureates.[2].firstname:
-"Omar M."
+$ curl -s 'https://randomuser.me/api/?results=5000&inc=name,location,email,login,dob,registered,phone,picture,nat' \
+  | gjq -F first | head -6
+results.[0].name.first:
+"Charles"
+results.[1].name.first:
+"Joel"
+results.[2].name.first:
+"Anthony"
 ```
 
 ```bash
 # jq — recursive descent with manual null suppression
-$ curl -s https://api.nobelprize.org/v1/prize.json | jq '.. | .firstname? // empty' | head -3
-"Susumu"
-"Richard"
-"Omar M."
+$ curl -s 'https://randomuser.me/api/?results=5000&inc=name,location,email,login,dob,registered,phone,picture,nat' \
+  | jq '.. | .first? // empty' | head -3
+"Charles"
+"Joel"
+"Anthony"
 ```
 
-One thing to notice: gjq prints the full path to each match (e.g. `prizes.[0].laureates.[0].firstname:`), so you always know *where* a value came from. jq strips that context. (Paths are shown when output goes to a terminal; piped output omits them by default. Toggle with `--with-path` / `--no-path`.)
+One thing to notice: gjq prints the full path to each match (e.g. `results.[0].name.first:`), so you always know *where* a value came from. jq strips that context. (Paths are shown when output goes to a terminal; piped output omits them by default. Toggle with `--with-path` / `--no-path`.)
 
 ### Matching multiple keys
 
 ```bash
 # gjq — alternation inside parentheses
-$ curl -s https://api.nobelprize.org/v1/prize.json | gjq 'prizes[0].(year|category)'
-prizes.[0].year:
-"2025"
-prizes.[0].category:
-"chemistry"
+$ curl -s 'https://randomuser.me/api/?results=5000&inc=name,location,email,login,dob,registered,phone,picture,nat' \
+  | gjq 'results[0].(nat|email)'
+results.[0].nat:
+"DE"
+results.[0].email:
+"charles.kuhne@example.com"
 ```
 
 ```bash
 # jq — enumerate each key separately
-$ curl -s https://api.nobelprize.org/v1/prize.json | jq '.prizes[0] | .year, .category'
-"2025"
-"chemistry"
+$ curl -s 'https://randomuser.me/api/?results=5000&inc=name,location,email,login,dob,registered,phone,picture,nat' \
+  | jq '.results[0] | .nat, .email'
+"DE"
+"charles.kuhne@example.com"
 ```
 
 ### Tallying results
 
 ```bash
 # gjq
-$ curl -s https://api.nobelprize.org/v1/prize.json | gjq -F firstname --count -n
-Found matches: 1026
+$ curl -s 'https://randomuser.me/api/?results=5000&inc=name,location,email,login,dob,registered,phone,picture,nat' \
+  | gjq -F first --count -n
+Found matches: 5000
 ```
 
 ```bash
 # jq
-$ curl -s https://api.nobelprize.org/v1/prize.json | jq '[.. | .firstname? // empty] | length'
-1026
+$ curl -s 'https://randomuser.me/api/?results=5000&inc=name,location,email,login,dob,registered,phone,picture,nat' \
+  | jq '[.. | .first? // empty] | length'
+5000
 ```
 
 ### Formatting JSON (analogous to jq '.')
@@ -142,18 +148,20 @@ Options:
 **Pluck a field from anywhere in the structure:**
 
 ```bash
-curl -s https://api.nobelprize.org/v1/prize.json | gjq -F motivation | head -4
-"\"for the development of metal–organic frameworks\""
-"\"for the development of metal–organic frameworks\""
-"\"for the development of metal–organic frameworks\""
-"\"for having identified the prerequisites for sustained growth through technological progress\""
+curl -s 'https://randomuser.me/api/?results=5000&inc=name,location,email,login,dob,registered,phone,picture,nat' \
+  | gjq -F country | head -4
+"Germany"
+"Norway"
+"Canada"
+"United States"
 ```
 
 **Count matches silently:**
 
 ```bash
-curl -s https://api.nobelprize.org/v1/prize.json | gjq -F firstname --count -n
-# Found matches: 1026
+curl -s 'https://randomuser.me/api/?results=5000&inc=name,location,email,login,dob,registered,phone,picture,nat' \
+  | gjq -F first --count -n
+# Found matches: 5000
 ```
 
 **Combining with standard Unix tools:**
@@ -162,17 +170,21 @@ gjq adapts its output depending on whether it's writing to a terminal or a pipe 
 
 ```bash
 # Values only when piped — ready for downstream processing
-$ curl -s https://api.nobelprize.org/v1/prize.json | gjq -F firstname | sort | head -3
-"A. Michael"
-"Aage N."
-"Aaron"
+$ curl -s 'https://randomuser.me/api/?results=5000&inc=name,location,email,login,dob,registered,phone,picture,nat' \
+  | gjq -F nat | sort | uniq -c | sort -rn | head -5
+ 265 "ES"
+ 263 "RS"
+ 260 "MX"
+ 257 "FR"
+ 253 "US"
 
 # Force path annotations on even when piped
-$ curl -s https://api.nobelprize.org/v1/prize.json | gjq -F firstname --with-path | head -4
-prizes.[0].laureates.[0].firstname:
-"Susumu"
-prizes.[0].laureates.[1].firstname:
-"Richard"
+$ curl -s 'https://randomuser.me/api/?results=5000&inc=name,location,email,login,dob,registered,phone,picture,nat' \
+  | gjq -F first --with-path | head -4
+results.[0].name.first:
+"Charles"
+results.[1].name.first:
+"Joel"
 ```
 
 ## Benchmark
@@ -182,35 +194,35 @@ CLI wall-clock time comparing `gjq` to `jq` on test data (median of 20 iteration
 ```
 gjq  gjq version 0.1.0
 jq   jq-1.8.1
-Iterations: 20
+Iterations: 10
 
 Benchmark                      |   gjq (ms) |    jq (ms) |  Speedup
 ------------------------------------------------------------------------
-prizes.category                |     4.72ms |     5.27ms |    1.12x
-prizes.laureates.surname       |     5.22ms |     5.36ms |    1.03x
-recursive firstname            |     2.49ms |     2.54ms |    1.02x
-recursive motivation (-F)      |     2.42ms |     2.41ms |    1.00x
-prizes.laureates.share         |     4.89ms |     5.02ms |    1.03x
-case-insensitive firstname     |     2.28ms |     2.48ms |    1.09x
-simple: name                   |     2.37ms |     3.03ms |    1.28x
-simple: name.first             |     2.50ms |     2.91ms |    1.16x
-simple: hobbies[0]             |     2.36ms |     3.00ms |    1.27x
-simple: wildcard *             |     2.38ms |     2.90ms |    1.22x
-nested: users[*].name          |     2.50ms |     3.01ms |    1.20x
-nested: deep recursive         |     2.26ms |     2.53ms |    1.12x
-openapi: *.*.summary           |     2.93ms |     3.70ms |    1.26x
+results.nat                    |    11.65ms |    11.21ms |    0.96x
+results.name.last              |    11.68ms |    11.33ms |    0.97x
+recursive first                |     2.31ms |     2.39ms |    1.03x
+recursive email (-F)           |     2.25ms |     2.31ms |    1.03x
+results.location.country       |    11.53ms |    11.28ms |    0.98x
+case-insensitive first         |     2.38ms |     2.37ms |    1.00x
+simple: name                   |     2.31ms |     2.68ms |    1.16x
+simple: name.first             |     2.21ms |     2.67ms |    1.21x
+simple: hobbies[0]             |     2.31ms |     2.75ms |    1.19x
+simple: wildcard *             |     2.25ms |     3.14ms |    1.40x
+nested: users[*].name          |     2.28ms |     2.75ms |    1.21x
+nested: deep recursive         |     2.23ms |     2.22ms |    1.00x
+openapi: *.*.summary           |     2.30ms |     2.72ms |    1.18x
 ```
 
-**Query details** (nobel_prizes.json, 227 KB):
+**Query details** (randomusers.json, 1 MB):
 
 | Benchmark | gjq | jq |
 |---|---|---|
-| `prizes.category` | `prizes[*].category` | `.prizes[].category` |
-| `prizes.laureates.surname` | `prizes[*].laureates[*].surname` | `.prizes[].laureates[].surname` |
-| `recursive firstname` | `**.firstname` | `[.. \| .firstname? // empty]` |
-| `recursive motivation (-F)` | `-F motivation` | `[.. \| .motivation? // empty]` |
-| `prizes.laureates.share` | `prizes[*].laureates[*].share` | `.prizes[].laureates[].share` |
-| `case-insensitive firstname` | `-i **.Firstname` | `[.. \| .firstname? // empty]` |
+| `results.nat` | `results[*].nat` | `.results[].nat` |
+| `results.name.last` | `results[*].name[*].last` | `.results[].name.last` |
+| `recursive first` | `**.first` | `[.. \| .first? // empty]` |
+| `recursive email (-F)` | `-F email` | `[.. \| .email? // empty]` |
+| `results.location.country` | `results[*].location[*].country` | `.results[].location.country` |
+| `case-insensitive first` | `-i **.First` | `[.. \| .first? // empty]` |
 
 
 ## Query language reference

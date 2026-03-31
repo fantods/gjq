@@ -939,23 +939,23 @@ func mustParseAnyJSONB(b *testing.B, input string) interface{} {
 	return convertNumbers(result)
 }
 
-func loadNobelPrizeJSON(b *testing.B) interface{} {
+func loadRandomUserJSON(b *testing.B) interface{} {
 	b.Helper()
-	data, err := os.ReadFile("../../tests/data/nobel_prizes.json")
+	data, err := os.ReadFile("../../tests/data/randomusers.json")
 	if err != nil {
-		b.Fatalf("failed to load nobel_prizes.json: %v", err)
+		b.Fatalf("failed to load randomusers.json: %v", err)
 	}
 	root, err := ParseJSONFromBytes(data)
 	if err != nil {
-		b.Fatalf("failed to parse nobel_prizes.json: %v", err)
+		b.Fatalf("failed to parse randomusers.json: %v", err)
 	}
 	return root
 }
 
-func BenchmarkNobelParse(b *testing.B) {
-	data, err := os.ReadFile("../../tests/data/nobel_prizes.json")
+func BenchmarkRandomUserParse(b *testing.B) {
+	data, err := os.ReadFile("../../tests/data/randomusers.json")
 	if err != nil {
-		b.Fatalf("failed to load nobel_prizes.json: %v", err)
+		b.Fatalf("failed to load randomusers.json: %v", err)
 	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -966,9 +966,9 @@ func BenchmarkNobelParse(b *testing.B) {
 	}
 }
 
-func BenchmarkNobelFindCategories(b *testing.B) {
-	root := loadNobelPrizeJSON(b)
-	q := mustParseQueryB(b, "prizes[*].category")
+func BenchmarkRandomUserFindNat(b *testing.B) {
+	root := loadRandomUserJSON(b)
+	q := mustParseQueryB(b, "results[*].nat")
 	dfa := NewQueryDFA(&q, false)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -976,9 +976,9 @@ func BenchmarkNobelFindCategories(b *testing.B) {
 	}
 }
 
-func BenchmarkNobelFindSurnames(b *testing.B) {
-	root := loadNobelPrizeJSON(b)
-	q := mustParseQueryB(b, "prizes[*].laureates[*].surname")
+func BenchmarkRandomUserFindLastName(b *testing.B) {
+	root := loadRandomUserJSON(b)
+	q := mustParseQueryB(b, "results[*].name[*].last")
 	dfa := NewQueryDFA(&q, false)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -986,9 +986,9 @@ func BenchmarkNobelFindSurnames(b *testing.B) {
 	}
 }
 
-func BenchmarkNobelFindRecursive(b *testing.B) {
-	root := loadNobelPrizeJSON(b)
-	q := mustParseQueryB(b, "**.firstname")
+func BenchmarkRandomUserFindRecursive(b *testing.B) {
+	root := loadRandomUserJSON(b)
+	q := mustParseQueryB(b, "**.first")
 	dfa := NewQueryDFA(&q, false)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -996,9 +996,9 @@ func BenchmarkNobelFindRecursive(b *testing.B) {
 	}
 }
 
-func BenchmarkNobelFindCaseInsensitive(b *testing.B) {
-	root := loadNobelPrizeJSON(b)
-	q := mustParseQueryB(b, "**.firstname")
+func BenchmarkRandomUserFindCaseInsensitive(b *testing.B) {
+	root := loadRandomUserJSON(b)
+	q := mustParseQueryB(b, "**.first")
 	dfa := NewQueryDFA(&q, true)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -1006,14 +1006,14 @@ func BenchmarkNobelFindCaseInsensitive(b *testing.B) {
 	}
 }
 
-func BenchmarkNobelFindFixedString(b *testing.B) {
-	root := loadNobelPrizeJSON(b)
+func BenchmarkRandomUserFindFixedString(b *testing.B) {
+	root := loadRandomUserJSON(b)
 	q := NewSequence([]Query{
 		NewKleeneStar(NewDisjunction([]Query{
 			NewFieldWildcard(),
 			NewArrayWildcard(),
 		})),
-		NewField("motivation"),
+		NewField("email"),
 	})
 	dfa := NewQueryDFA(&q, false)
 	b.ResetTimer()

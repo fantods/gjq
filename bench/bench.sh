@@ -80,13 +80,13 @@ print('█' * filled + '░' * (w - filled), end='')
 
 # Each entry: LABEL | FILE | GJQ_QUERY | JQ_QUERY | GJQ_EXTRA_FLAGS
 declare -a BENCHES=(
-    # --- nobel_prizes.json (227 KB) ---
-    "prizes.category          |nobel_prizes.json|prizes[*].category                       |.prizes[].category                    |"
-    "prizes.laureates.surname |nobel_prizes.json|prizes[*].laureates[*].surname           |.prizes[].laureates[].surname         |"
-    "recursive firstname      |nobel_prizes.json|**.firstname                             |[.. | .firstname? // empty]           |"
-    "recursive motivation (-F)|nobel_prizes.json|motivation                               |[.. | .motivation? // empty]          |-F"
-    "prizes.laureates.share   |nobel_prizes.json|prizes[*].laureates[*].share             |.prizes[].laureates[].share           |"
-    "case-insensitive firstname|nobel_prizes.json|**.Firstname                            |[.. | .firstname? // empty]           |-i"
+    # --- randomusers.json (1 MB) ---
+    "results.nat               |randomusers.json|results[*].nat                            |.results[].nat                        |"
+    "results.name.last         |randomusers.json|results[*].name[*].last                  |.results[].name.last                  |"
+    "recursive first           |randomusers.json|**.first                                 |[.. | .first? // empty]               |"
+    "recursive email (-F)      |randomusers.json|email                                    |[.. | .email? // empty]               |-F"
+    "results.location.country  |randomusers.json|results[*].location[*].country           |.results[].location.country           |"
+    "case-insensitive first    |randomusers.json|**.First                                 |[.. | .first? // empty]               |-i"
 
     # --- simple.json (106 B) ---
     "simple: name             |simple.json      |name                                     |.name                                 |"

@@ -200,18 +200,18 @@ func TestFixedStringMultipleMatches(t *testing.T) {
 }
 
 func TestLargeFileWildcardQuery(t *testing.T) {
-	output := runGjqSuccess(t, "prizes[*].category", "data/nobel_prizes.json", "--count", "--no-display")
-	if !strings.Contains(output, "Found matches: 682") {
-		t.Errorf("expected 682 prize categories, got: %q", output)
+	output := runGjqSuccess(t, "results[*].nat", "data/randomusers.json", "--count", "--no-display")
+	if !strings.Contains(output, "Found matches: 1000") {
+		t.Errorf("expected 1000 nationalities, got: %q", output)
 	}
 }
 
 func TestLargeFileDeepQuery(t *testing.T) {
-	output := runGjqSuccess(t, "prizes[0].laureates[*].surname", "data/nobel_prizes.json", "--with-path")
+	output := runGjqSuccess(t, "results[0].name.last", "data/randomusers.json", "--with-path")
 	if strings.TrimSpace(output) == "" {
-		t.Error("expected output for deep query into Nobel Prize data, got empty")
+		t.Error("expected output for deep query into randomuser data, got empty")
 	}
-	if !strings.Contains(output, "Kitagawa") {
-		t.Errorf("expected 'Kitagawa' in output, got: %q", output)
+	if !strings.Contains(output, "Banerjee") {
+		t.Errorf("expected 'Banerjee' in output, got: %q", output)
 	}
 }
