@@ -244,5 +244,4 @@ Operators compose freely inside parentheses. For instance, `foo.(bar|baz).qux` e
 
 To descend through an arbitrary mix of objects and arrays, use `(* | [*])*` — so `(* | [*])*.foo` would locate every `foo` field no matter how deeply it's nested.
 
-Under the hood, the query engine parses expressions into an [NFA](https://en.wikipedia.org/wiki/Nondeterministic_finite_automaton), then converts that into a [DFA](https://en.wikipedia.org/wiki/Deterministic_finite_automaton) before walking the document. See the [grammar](./src/query/grammar) directory and the [`query`](./src/query) module for implementation details.
-
+Under the hood, the query engine parses expressions into an [NFA](https://en.wikipedia.org/wiki/Nondeterministic_finite_automaton), then converts that into a [DFA](https://en.wikipedia.org/wiki/Deterministic_finite_automaton) before walking the document. 
