@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-`gjq` is a CLI tool (Go port of [jsongrep](https://github.com/micahkepe/jsongrep)) for querying JSON documents using **regular path expressions**. Queries are regular expressions applied to JSON paths (field names and array indices), compiled into a DFA for efficient traversal. Reference implementation: `.ref/jsongrep/`.
+`gjq` is a CLI tool for querying JSON documents using **regular path expressions**. Queries are regular expressions applied to JSON paths (field names and array indices), compiled into a DFA for efficient traversal. Reference implementation: `.ref/jsongrep/`.
 
 ## Technology Stack
 
