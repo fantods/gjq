@@ -17,12 +17,12 @@ func countTrue(bits []bool) int {
 
 func TestNFAEmptyQuery(t *testing.T) {
 	q := NewSequence(nil)
-	nfa := NewQueryNFA(&q)
+	nfa := NewQueryNFA(q)
 	if nfa.NumStates != 1 {
 		t.Fatalf("expected 1 state, got %d", nfa.NumStates)
 	}
-	if !nfa.ContainsEmpty {
-		t.Fatal("expected ContainsEmpty=true")
+	if !nfa.IsEmpty {
+		t.Fatal("expected IsEmpty=true")
 	}
 	if !nfa.IsAccepting[0] {
 		t.Fatal("start state should be accepting")
@@ -31,13 +31,13 @@ func TestNFAEmptyQuery(t *testing.T) {
 
 func TestNFASingleField(t *testing.T) {
 	q := NewField("foo")
-	nfa := NewQueryNFA(&q)
+	nfa := NewQueryNFA(q)
 
 	if nfa.NumStates != 2 {
 		t.Fatalf("expected 2 states, got %d", nfa.NumStates)
 	}
-	if nfa.ContainsEmpty {
-		t.Fatal("expected ContainsEmpty=false")
+	if nfa.IsEmpty {
+		t.Fatal("expected IsEmpty=false")
 	}
 	if countTrue(nfa.IsFirst) != 1 || !nfa.IsFirst[0] {
 		t.Fatalf("expected first set = {0}, got %v", nfa.IsFirst)
@@ -64,13 +64,13 @@ func TestNFASingleField(t *testing.T) {
 
 func TestNFAOptionalField(t *testing.T) {
 	q := NewOptional(NewField("foo"))
-	nfa := NewQueryNFA(&q)
+	nfa := NewQueryNFA(q)
 
 	if nfa.NumStates != 2 {
 		t.Fatalf("expected 2 states, got %d", nfa.NumStates)
 	}
-	if !nfa.ContainsEmpty {
-		t.Fatal("expected ContainsEmpty=true")
+	if !nfa.IsEmpty {
+		t.Fatal("expected IsEmpty=true")
 	}
 	if countTrue(nfa.IsAccepting) != 2 {
 		t.Fatalf("expected 2 accepting states, got %d", countTrue(nfa.IsAccepting))
@@ -88,13 +88,13 @@ func TestNFAOptionalField(t *testing.T) {
 
 func TestNFAKleeneStar(t *testing.T) {
 	q := NewKleeneStar(NewField("a"))
-	nfa := NewQueryNFA(&q)
+	nfa := NewQueryNFA(q)
 
 	if nfa.NumStates != 2 {
 		t.Fatalf("expected 2 states, got %d", nfa.NumStates)
 	}
-	if !nfa.ContainsEmpty {
-		t.Fatal("expected ContainsEmpty=true")
+	if !nfa.IsEmpty {
+		t.Fatal("expected IsEmpty=true")
 	}
 	if !nfa.IsAccepting[0] {
 		t.Fatal("start state should be accepting")
@@ -116,7 +116,7 @@ func TestNFAKleeneStar(t *testing.T) {
 
 func TestNFASequence(t *testing.T) {
 	q := NewSequence([]Query{NewField("foo"), NewField("bar"), NewField("baz")})
-	nfa := NewQueryNFA(&q)
+	nfa := NewQueryNFA(q)
 
 	if nfa.NumStates != 4 {
 		t.Fatalf("expected 4 states, got %d", nfa.NumStates)
@@ -147,7 +147,7 @@ func TestNFASequence(t *testing.T) {
 
 func TestNFADisjunction(t *testing.T) {
 	q := NewDisjunction([]Query{NewField("foo"), NewField("bar")})
-	nfa := NewQueryNFA(&q)
+	nfa := NewQueryNFA(q)
 
 	if nfa.NumStates != 3 {
 		t.Fatalf("expected 3 states, got %d", nfa.NumStates)
@@ -177,7 +177,7 @@ func TestNFAFieldBranchDisjunction(t *testing.T) {
 		NewSequence([]Query{NewField("foo"), NewField("a")}),
 		NewSequence([]Query{NewField("foo"), NewField("b")}),
 	})
-	nfa := NewQueryNFA(&q)
+	nfa := NewQueryNFA(q)
 
 	if countTrue(nfa.IsFirst) != 2 {
 		t.Fatalf("expected 2 in first set, got %d", countTrue(nfa.IsFirst))
@@ -201,7 +201,7 @@ func TestNFADisjunctionSequences(t *testing.T) {
 		NewSequence([]Query{NewField("foo"), NewField("bar"), NewField("baz")}),
 		NewSequence([]Query{NewField("x"), NewField("y"), NewField("z")}),
 	})
-	nfa := NewQueryNFA(&q)
+	nfa := NewQueryNFA(q)
 
 	if countTrue(nfa.IsAccepting) != 2 {
 		t.Fatalf("expected 2 accepting, got %d", countTrue(nfa.IsAccepting))
@@ -220,7 +220,7 @@ func TestNFAComplexDisjunction(t *testing.T) {
 		NewOptional(NewField("bar")),
 		NewKleeneStar(NewField("baz")),
 	})
-	nfa := NewQueryNFA(&q)
+	nfa := NewQueryNFA(q)
 
 	if countTrue(nfa.IsAccepting) != 4 {
 		t.Fatalf("expected 4 accepting states, got %d: %v", countTrue(nfa.IsAccepting), nfa.IsAccepting)
@@ -244,7 +244,7 @@ func TestNFARangeOverlap(t *testing.T) {
 		NewSequence([]Query{NewField("foo"), NewIndex(1)}),
 		NewSequence([]Query{NewField("foo"), NewArrayWildcard()}),
 	})
-	nfa := NewQueryNFA(&q)
+	nfa := NewQueryNFA(q)
 
 	if countTrue(nfa.IsFirst) != 2 {
 		t.Fatalf("expected 2 in first set, got %d", countTrue(nfa.IsFirst))
@@ -269,7 +269,7 @@ func TestNFAKleeneWithFollowing(t *testing.T) {
 		NewKleeneStar(NewField("a")),
 		NewField("b"),
 	})
-	nfa := NewQueryNFA(&q)
+	nfa := NewQueryNFA(q)
 
 	if countTrue(nfa.IsAccepting) != 1 {
 		t.Fatalf("expected 1 accepting state, got %d", countTrue(nfa.IsAccepting))
@@ -305,7 +305,7 @@ func TestNFAMultipleOptional(t *testing.T) {
 		NewOptional(NewField("b")),
 		NewOptional(NewField("c")),
 	})
-	nfa := NewQueryNFA(&q)
+	nfa := NewQueryNFA(q)
 
 	if countTrue(nfa.IsAccepting) != 4 {
 		t.Fatalf("expected 4 accepting states, got %d: %v", countTrue(nfa.IsAccepting), nfa.IsAccepting)
@@ -330,7 +330,7 @@ func TestNFAKleeneSequence(t *testing.T) {
 		NewKleeneStar(NewArrayWildcard()),
 		NewArrayWildcard(),
 	})
-	nfa := NewQueryNFA(&q)
+	nfa := NewQueryNFA(q)
 
 	if len(nfa.Follows) < 1 {
 		t.Fatal("expected follows set")
@@ -348,7 +348,7 @@ func TestNFAKleeneSequence(t *testing.T) {
 
 func TestNFAIndex(t *testing.T) {
 	q := NewIndex(5)
-	nfa := NewQueryNFA(&q)
+	nfa := NewQueryNFA(q)
 
 	if nfa.PosToLabel[0].Kind != LabelRange {
 		t.Fatalf("expected Range label, got %v", nfa.PosToLabel[0])
@@ -360,7 +360,7 @@ func TestNFAIndex(t *testing.T) {
 
 func TestNFAArrayWildcardLabel(t *testing.T) {
 	q := NewArrayWildcard()
-	nfa := NewQueryNFA(&q)
+	nfa := NewQueryNFA(q)
 
 	if nfa.PosToLabel[0].Kind != LabelRange {
 		t.Fatalf("expected Range label for ArrayWildcard, got %v", nfa.PosToLabel[0])
@@ -372,19 +372,22 @@ func TestNFAArrayWildcardLabel(t *testing.T) {
 
 func TestNFARangeFromLabel(t *testing.T) {
 	q := NewRangeFrom(7)
-	nfa := NewQueryNFA(&q)
+	nfa := NewQueryNFA(q)
 
-	if nfa.PosToLabel[0].Kind != LabelRangeFrom {
-		t.Fatalf("expected RangeFrom label, got %v", nfa.PosToLabel[0])
+	if nfa.PosToLabel[0].Kind != LabelRange {
+		t.Fatalf("expected Range label, got %v", nfa.PosToLabel[0])
 	}
 	if nfa.PosToLabel[0].RangeLo != 7 {
-		t.Fatalf("expected RangeFrom(7), got RangeFrom(%d)", nfa.PosToLabel[0].RangeLo)
+		t.Fatalf("expected RangeLo=7, got %d", nfa.PosToLabel[0].RangeLo)
+	}
+	if nfa.PosToLabel[0].RangeHi != math.MaxInt {
+		t.Fatalf("expected RangeHi=MaxInt for RangeFrom, got %d", nfa.PosToLabel[0].RangeHi)
 	}
 }
 
 func TestNFAFieldWildcardLabel(t *testing.T) {
 	q := NewFieldWildcard()
-	nfa := NewQueryNFA(&q)
+	nfa := NewQueryNFA(q)
 
 	if nfa.PosToLabel[0].Kind != LabelFieldWildcard {
 		t.Fatalf("expected FieldWildcard label, got %v", nfa.PosToLabel[0])
@@ -396,7 +399,7 @@ func TestNFAParseAndBuild(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
-	nfa := NewQueryNFA(&q)
+	nfa := NewQueryNFA(q)
 
 	if nfa.NumStates == 0 {
 		t.Fatal("expected non-zero states")
@@ -421,10 +424,10 @@ func TestNFAAnyPathGroup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
-	nfa := NewQueryNFA(&q)
+	nfa := NewQueryNFA(q)
 
-	if !nfa.ContainsEmpty {
-		t.Fatal("expected ContainsEmpty=true for (* | [*])*")
+	if !nfa.IsEmpty {
+		t.Fatal("expected IsEmpty=true for (* | [*])*")
 	}
 	if !nfa.IsAccepting[0] {
 		t.Fatal("start state should be accepting")

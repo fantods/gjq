@@ -194,23 +194,23 @@ CLI wall-clock time comparing `gjq` to `jq` on test data (median of 20 iteration
 ```
 gjq  gjq version 0.1.0
 jq   jq-1.8.1
-Iterations: 10
+Iterations: 20
 
 Benchmark                      |   gjq (ms) |    jq (ms) |  Speedup
 ------------------------------------------------------------------------
-results.nat                    |    11.65ms |    11.21ms |    0.96x
-results.name.last              |    11.68ms |    11.33ms |    0.97x
-recursive first                |     2.31ms |     2.39ms |    1.03x
-recursive email (-F)           |     2.25ms |     2.31ms |    1.03x
-results.location.country       |    11.53ms |    11.28ms |    0.98x
-case-insensitive first         |     2.38ms |     2.37ms |    1.00x
-simple: name                   |     2.31ms |     2.68ms |    1.16x
-simple: name.first             |     2.21ms |     2.67ms |    1.21x
-simple: hobbies[0]             |     2.31ms |     2.75ms |    1.19x
-simple: wildcard *             |     2.25ms |     3.14ms |    1.40x
-nested: users[*].name          |     2.28ms |     2.75ms |    1.21x
-nested: deep recursive         |     2.23ms |     2.22ms |    1.00x
-openapi: *.*.summary           |     2.30ms |     2.72ms |    1.18x
+results.nat                    |    13.87ms |    13.48ms |    0.97x
+results.name.last              |    13.81ms |    13.58ms |    0.98x
+recursive first                |     3.16ms |     3.16ms |    1.00x
+recursive email (-F)           |     2.98ms |     3.23ms |    1.08x
+results.location.country       |    13.71ms |    13.74ms |    1.00x
+case-insensitive first         |     3.11ms |     3.12ms |    1.00x
+simple: name                   |     3.17ms |     3.62ms |    1.14x
+simple: name.first             |     3.08ms |     3.77ms |    1.22x
+simple: hobbies[0]             |     3.22ms |     3.59ms |    1.11x
+simple: wildcard *             |     3.07ms |     3.62ms |    1.18x
+nested: users[*].name          |     3.03ms |     3.44ms |    1.14x
+nested: deep recursive         |     2.87ms |     2.94ms |    1.02x
+openapi: *.*.summary           |     3.05ms |     3.55ms |    1.16x
 ```
 
 **Query details** (randomusers.json, 1 MB):

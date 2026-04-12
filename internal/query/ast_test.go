@@ -6,107 +6,116 @@ import (
 
 func TestNewField(t *testing.T) {
 	q := NewField("foo")
-	if q.Kind != QueryField {
-		t.Fatalf("expected QueryField, got %d", q.Kind)
+	f, ok := q.(FieldExpr)
+	if !ok {
+		t.Fatalf("expected FieldExpr, got %T", q)
 	}
-	if q.Field != "foo" {
-		t.Fatalf("expected field 'foo', got %q", q.Field)
+	if f.Name != "foo" {
+		t.Fatalf("expected field 'foo', got %q", f.Name)
 	}
 }
 
 func TestNewIndex(t *testing.T) {
 	q := NewIndex(3)
-	if q.Kind != QueryIndex {
-		t.Fatalf("expected QueryIndex, got %d", q.Kind)
+	idx, ok := q.(IndexExpr)
+	if !ok {
+		t.Fatalf("expected IndexExpr, got %T", q)
 	}
-	if q.Index != 3 {
-		t.Fatalf("expected index 3, got %d", q.Index)
+	if idx.Index != 3 {
+		t.Fatalf("expected index 3, got %d", idx.Index)
 	}
 }
 
 func TestNewRange(t *testing.T) {
 	q := NewRange(2, 5)
-	if q.Kind != QueryRange {
-		t.Fatalf("expected QueryRange, got %d", q.Kind)
+	r, ok := q.(RangeExpr)
+	if !ok {
+		t.Fatalf("expected RangeExpr, got %T", q)
 	}
-	if q.Index != 2 || q.RangeEnd != 5 {
-		t.Fatalf("expected range [2,5), got [%d,%d)", q.Index, q.RangeEnd)
+	if r.Start != 2 || r.End != 5 {
+		t.Fatalf("expected range [2,5), got [%d,%d)", r.Start, r.End)
 	}
 }
 
 func TestNewRangeFrom(t *testing.T) {
 	q := NewRangeFrom(3)
-	if q.Kind != QueryRangeFrom {
-		t.Fatalf("expected QueryRangeFrom, got %d", q.Kind)
+	r, ok := q.(RangeFromExpr)
+	if !ok {
+		t.Fatalf("expected RangeFromExpr, got %T", q)
 	}
-	if q.Index != 3 {
-		t.Fatalf("expected rangeFrom 3, got %d", q.Index)
+	if r.Start != 3 {
+		t.Fatalf("expected rangeFrom 3, got %d", r.Start)
 	}
 }
 
 func TestNewFieldWildcard(t *testing.T) {
 	q := NewFieldWildcard()
-	if q.Kind != QueryFieldWildcard {
-		t.Fatalf("expected QueryFieldWildcard, got %d", q.Kind)
+	if _, ok := q.(WildcardExpr); !ok {
+		t.Fatalf("expected WildcardExpr, got %T", q)
 	}
 }
 
 func TestNewArrayWildcard(t *testing.T) {
 	q := NewArrayWildcard()
-	if q.Kind != QueryArrayWildcard {
-		t.Fatalf("expected QueryArrayWildcard, got %d", q.Kind)
+	if _, ok := q.(ArrayWildExpr); !ok {
+		t.Fatalf("expected ArrayWildExpr, got %T", q)
 	}
 }
 
 func TestNewRegex(t *testing.T) {
 	q := NewRegex("^foo")
-	if q.Kind != QueryRegex {
-		t.Fatalf("expected QueryRegex, got %d", q.Kind)
+	r, ok := q.(RegexExpr)
+	if !ok {
+		t.Fatalf("expected RegexExpr, got %T", q)
 	}
-	if q.Regex != "^foo" {
-		t.Fatalf("expected regex '^foo', got %q", q.Regex)
+	if r.Pattern != "^foo" {
+		t.Fatalf("expected regex '^foo', got %q", r.Pattern)
 	}
 }
 
 func TestNewOptional(t *testing.T) {
 	inner := NewField("foo")
 	q := NewOptional(inner)
-	if q.Kind != QueryOptional {
-		t.Fatalf("expected QueryOptional, got %d", q.Kind)
+	o, ok := q.(OptionalExpr)
+	if !ok {
+		t.Fatalf("expected OptionalExpr, got %T", q)
 	}
-	if len(q.Children) != 1 || q.Children[0].Kind != QueryField {
-		t.Fatal("optional should wrap one child")
+	if _, ok := o.Child.(FieldExpr); !ok {
+		t.Fatal("optional should wrap a FieldExpr")
 	}
 }
 
 func TestNewKleeneStar(t *testing.T) {
 	inner := NewField("foo")
 	q := NewKleeneStar(inner)
-	if q.Kind != QueryKleeneStar {
-		t.Fatalf("expected QueryKleeneStar, got %d", q.Kind)
+	s, ok := q.(StarExpr)
+	if !ok {
+		t.Fatalf("expected StarExpr, got %T", q)
 	}
-	if len(q.Children) != 1 || q.Children[0].Kind != QueryField {
-		t.Fatal("kleene star should wrap one child")
+	if _, ok := s.Child.(FieldExpr); !ok {
+		t.Fatal("kleene star should wrap a FieldExpr")
 	}
 }
 
 func TestNewDisjunction(t *testing.T) {
 	q := NewDisjunction([]Query{NewField("foo"), NewField("bar")})
-	if q.Kind != QueryDisjunction {
-		t.Fatalf("expected QueryDisjunction, got %d", q.Kind)
+	d, ok := q.(DisjExpr)
+	if !ok {
+		t.Fatalf("expected DisjExpr, got %T", q)
 	}
-	if len(q.Children) != 2 {
-		t.Fatalf("expected 2 children, got %d", len(q.Children))
+	if len(d.Branches) != 2 {
+		t.Fatalf("expected 2 branches, got %d", len(d.Branches))
 	}
 }
 
 func TestNewSequence(t *testing.T) {
 	q := NewSequence([]Query{NewField("foo"), NewField("bar"), NewIndex(0)})
-	if q.Kind != QuerySequence {
-		t.Fatalf("expected QuerySequence, got %d", q.Kind)
+	s, ok := q.(SeqExpr)
+	if !ok {
+		t.Fatalf("expected SeqExpr, got %T", q)
 	}
-	if len(q.Children) != 3 {
-		t.Fatalf("expected 3 children, got %d", len(q.Children))
+	if len(s.Steps) != 3 {
+		t.Fatalf("expected 3 steps, got %d", len(s.Steps))
 	}
 }
 

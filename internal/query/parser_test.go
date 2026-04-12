@@ -2,13 +2,94 @@ package query
 
 import "testing"
 
+func mustAssertField(t *testing.T, q Query, name string) {
+	t.Helper()
+	f, ok := q.(FieldExpr)
+	if !ok {
+		t.Fatalf("expected FieldExpr, got %T", q)
+	}
+	if f.Name != name {
+		t.Fatalf("expected field %q, got %q", name, f.Name)
+	}
+}
+
+func mustAssertIndex(t *testing.T, q Query, idx int) {
+	t.Helper()
+	i, ok := q.(IndexExpr)
+	if !ok {
+		t.Fatalf("expected IndexExpr, got %T", q)
+	}
+	if i.Index != idx {
+		t.Fatalf("expected index %d, got %d", idx, i.Index)
+	}
+}
+
+func mustAssertRange(t *testing.T, q Query, start, end int) {
+	t.Helper()
+	r, ok := q.(RangeExpr)
+	if !ok {
+		t.Fatalf("expected RangeExpr, got %T", q)
+	}
+	if r.Start != start || r.End != end {
+		t.Fatalf("expected range [%d,%d), got [%d,%d)", start, end, r.Start, r.End)
+	}
+}
+
+func mustAssertRangeFrom(t *testing.T, q Query, start int) {
+	t.Helper()
+	r, ok := q.(RangeFromExpr)
+	if !ok {
+		t.Fatalf("expected RangeFromExpr, got %T", q)
+	}
+	if r.Start != start {
+		t.Fatalf("expected rangeFrom %d, got %d", start, r.Start)
+	}
+}
+
+func mustAssertSeq(t *testing.T, q Query) SeqExpr {
+	t.Helper()
+	s, ok := q.(SeqExpr)
+	if !ok {
+		t.Fatalf("expected SeqExpr, got %T", q)
+	}
+	return s
+}
+
+func mustAssertDisj(t *testing.T, q Query) DisjExpr {
+	t.Helper()
+	d, ok := q.(DisjExpr)
+	if !ok {
+		t.Fatalf("expected DisjExpr, got %T", q)
+	}
+	return d
+}
+
+func mustAssertOpt(t *testing.T, q Query) OptionalExpr {
+	t.Helper()
+	o, ok := q.(OptionalExpr)
+	if !ok {
+		t.Fatalf("expected OptionalExpr, got %T", q)
+	}
+	return o
+}
+
+func mustAssertStar(t *testing.T, q Query) StarExpr {
+	t.Helper()
+	s, ok := q.(StarExpr)
+	if !ok {
+		t.Fatalf("expected StarExpr, got %T", q)
+	}
+	return s
+}
+
 func TestParseEmpty(t *testing.T) {
 	q, err := ParseQuery("")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if q.Kind != QuerySequence || len(q.Children) != 0 {
-		t.Fatalf("expected empty sequence, got %+v", q)
+	s := mustAssertSeq(t, q)
+	if len(s.Steps) != 0 {
+		t.Fatalf("expected empty sequence, got %d steps", len(s.Steps))
 	}
 }
 
@@ -17,9 +98,7 @@ func TestParseField(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if q.Kind != QueryField || q.Field != "foo" {
-		t.Fatalf("expected Field('foo'), got %+v", q)
-	}
+	mustAssertField(t, q, "foo")
 }
 
 func TestParseQuotedField(t *testing.T) {
@@ -27,9 +106,7 @@ func TestParseQuotedField(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if q.Kind != QueryField || q.Field != "foo bar" {
-		t.Fatalf("expected Field('foo bar'), got %+v", q)
-	}
+	mustAssertField(t, q, "foo bar")
 }
 
 func TestParseIndex(t *testing.T) {
@@ -37,9 +114,7 @@ func TestParseIndex(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if q.Kind != QueryIndex || q.Index != 3 {
-		t.Fatalf("expected Index(3), got %+v", q)
-	}
+	mustAssertIndex(t, q, 3)
 }
 
 func TestParseRange(t *testing.T) {
@@ -47,9 +122,7 @@ func TestParseRange(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if q.Kind != QueryRange || q.Index != 2 || q.RangeEnd != 5 {
-		t.Fatalf("expected Range(2,5), got %+v", q)
-	}
+	mustAssertRange(t, q, 2, 5)
 }
 
 func TestParseRangeOpenEnd(t *testing.T) {
@@ -57,9 +130,7 @@ func TestParseRangeOpenEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if q.Kind != QueryRangeFrom || q.Index != 3 {
-		t.Fatalf("expected RangeFrom(3), got %+v", q)
-	}
+	mustAssertRangeFrom(t, q, 3)
 }
 
 func TestParseRangeOpenStart(t *testing.T) {
@@ -67,9 +138,7 @@ func TestParseRangeOpenStart(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if q.Kind != QueryRange || q.Index != 0 || q.RangeEnd != 5 {
-		t.Fatalf("expected Range(0,5), got %+v", q)
-	}
+	mustAssertRange(t, q, 0, 5)
 }
 
 func TestParseArrayWildcard(t *testing.T) {
@@ -77,8 +146,8 @@ func TestParseArrayWildcard(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if q.Kind != QueryArrayWildcard {
-		t.Fatalf("expected ArrayWildcard, got %+v", q)
+	if _, ok := q.(ArrayWildExpr); !ok {
+		t.Fatalf("expected ArrayWildExpr, got %T", q)
 	}
 }
 
@@ -87,8 +156,8 @@ func TestParseRangeAll(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if q.Kind != QueryArrayWildcard {
-		t.Fatalf("expected ArrayWildcard for [:], got %+v", q)
+	if _, ok := q.(ArrayWildExpr); !ok {
+		t.Fatalf("expected ArrayWildExpr for [:], got %T", q)
 	}
 }
 
@@ -97,8 +166,8 @@ func TestParseFieldWildcard(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if q.Kind != QueryFieldWildcard {
-		t.Fatalf("expected FieldWildcard, got %+v", q)
+	if _, ok := q.(WildcardExpr); !ok {
+		t.Fatalf("expected WildcardExpr, got %T", q)
 	}
 }
 
@@ -107,8 +176,12 @@ func TestParseRegex(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if q.Kind != QueryRegex || q.Regex != "foo.bar" {
-		t.Fatalf("expected Regex('foo.bar'), got %+v", q)
+	r, ok := q.(RegexExpr)
+	if !ok {
+		t.Fatalf("expected RegexExpr, got %T", q)
+	}
+	if r.Pattern != "foo.bar" {
+		t.Fatalf("expected pattern 'foo.bar', got %q", r.Pattern)
 	}
 }
 
@@ -117,8 +190,12 @@ func TestParseRegexEscapedSlash(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if q.Kind != QueryRegex || q.Regex != "foo/bar" {
-		t.Fatalf("expected Regex('foo/bar'), got %+v", q)
+	r, ok := q.(RegexExpr)
+	if !ok {
+		t.Fatalf("expected RegexExpr, got %T", q)
+	}
+	if r.Pattern != "foo/bar" {
+		t.Fatalf("expected pattern 'foo/bar', got %q", r.Pattern)
 	}
 }
 
@@ -127,15 +204,12 @@ func TestParseSequence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if q.Kind != QuerySequence || len(q.Children) != 2 {
-		t.Fatalf("expected Sequence of 2, got %+v", q)
+	s := mustAssertSeq(t, q)
+	if len(s.Steps) != 2 {
+		t.Fatalf("expected 2 steps, got %d", len(s.Steps))
 	}
-	if q.Children[0].Kind != QueryField || q.Children[0].Field != "foo" {
-		t.Fatalf("expected first child Field('foo'), got %+v", q.Children[0])
-	}
-	if q.Children[1].Kind != QueryField || q.Children[1].Field != "bar" {
-		t.Fatalf("expected second child Field('bar'), got %+v", q.Children[1])
-	}
+	mustAssertField(t, s.Steps[0], "foo")
+	mustAssertField(t, s.Steps[1], "bar")
 }
 
 func TestParseDisjunction(t *testing.T) {
@@ -143,15 +217,12 @@ func TestParseDisjunction(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if q.Kind != QueryDisjunction || len(q.Children) != 2 {
-		t.Fatalf("expected Disjunction of 2, got %+v", q)
+	d := mustAssertDisj(t, q)
+	if len(d.Branches) != 2 {
+		t.Fatalf("expected 2 branches, got %d", len(d.Branches))
 	}
-	if q.Children[0].Kind != QueryField || q.Children[0].Field != "foo" {
-		t.Fatalf("expected first branch Field('foo'), got %+v", q.Children[0])
-	}
-	if q.Children[1].Kind != QueryField || q.Children[1].Field != "bar" {
-		t.Fatalf("expected second branch Field('bar'), got %+v", q.Children[1])
-	}
+	mustAssertField(t, d.Branches[0], "foo")
+	mustAssertField(t, d.Branches[1], "bar")
 }
 
 func TestParseDisjunctionSingle(t *testing.T) {
@@ -159,8 +230,8 @@ func TestParseDisjunctionSingle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if q.Kind == QueryDisjunction {
-		t.Fatalf("single element should not be wrapped in Disjunction")
+	if _, ok := q.(DisjExpr); ok {
+		t.Fatalf("single element should not be wrapped in DisjExpr")
 	}
 }
 
@@ -169,12 +240,8 @@ func TestParseOptional(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if q.Kind != QueryOptional {
-		t.Fatalf("expected Optional, got %+v", q)
-	}
-	if len(q.Children) != 1 || q.Children[0].Kind != QueryField || q.Children[0].Field != "foo" {
-		t.Fatalf("expected Optional(Field('foo')), got %+v", q)
-	}
+	o := mustAssertOpt(t, q)
+	mustAssertField(t, o.Child, "foo")
 }
 
 func TestParseKleeneStar(t *testing.T) {
@@ -182,12 +249,8 @@ func TestParseKleeneStar(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if q.Kind != QueryKleeneStar {
-		t.Fatalf("expected KleeneStar, got %+v", q)
-	}
-	if len(q.Children) != 1 || q.Children[0].Kind != QueryField || q.Children[0].Field != "a" {
-		t.Fatalf("expected KleeneStar(Field('a')), got %+v", q)
-	}
+	s := mustAssertStar(t, q)
+	mustAssertField(t, s.Child, "a")
 }
 
 func TestParseFieldWithIndex(t *testing.T) {
@@ -195,15 +258,12 @@ func TestParseFieldWithIndex(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if q.Kind != QuerySequence || len(q.Children) != 2 {
-		t.Fatalf("expected Sequence(Field, Index), got %+v", q)
+	s := mustAssertSeq(t, q)
+	if len(s.Steps) != 2 {
+		t.Fatalf("expected 2 steps, got %d", len(s.Steps))
 	}
-	if q.Children[0].Kind != QueryField || q.Children[0].Field != "foo" {
-		t.Fatalf("expected first child Field('foo'), got %+v", q.Children[0])
-	}
-	if q.Children[1].Kind != QueryIndex || q.Children[1].Index != 3 {
-		t.Fatalf("expected second child Index(3), got %+v", q.Children[1])
-	}
+	mustAssertField(t, s.Steps[0], "foo")
+	mustAssertIndex(t, s.Steps[1], 3)
 }
 
 func TestParseFieldWithArrayWildcard(t *testing.T) {
@@ -211,11 +271,12 @@ func TestParseFieldWithArrayWildcard(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if q.Kind != QuerySequence || len(q.Children) != 2 {
-		t.Fatalf("expected Sequence(Field, ArrayWildcard), got %+v", q)
+	s := mustAssertSeq(t, q)
+	if len(s.Steps) != 2 {
+		t.Fatalf("expected 2 steps, got %d", len(s.Steps))
 	}
-	if q.Children[1].Kind != QueryArrayWildcard {
-		t.Fatalf("expected second child ArrayWildcard, got %+v", q.Children[1])
+	if _, ok := s.Steps[1].(ArrayWildExpr); !ok {
+		t.Fatalf("expected ArrayWildExpr, got %T", s.Steps[1])
 	}
 }
 
@@ -224,12 +285,11 @@ func TestParseFieldWithRange(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if q.Kind != QuerySequence || len(q.Children) != 2 {
-		t.Fatalf("expected Sequence(Field, Range), got %+v", q)
+	s := mustAssertSeq(t, q)
+	if len(s.Steps) != 2 {
+		t.Fatalf("expected 2 steps, got %d", len(s.Steps))
 	}
-	if q.Children[1].Kind != QueryRange || q.Children[1].Index != 2 || q.Children[1].RangeEnd != 5 {
-		t.Fatalf("expected Range(2,5), got %+v", q.Children[1])
-	}
+	mustAssertRange(t, s.Steps[1], 2, 5)
 }
 
 func TestParseComplexQuery(t *testing.T) {
@@ -237,36 +297,23 @@ func TestParseComplexQuery(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if q.Kind != QuerySequence {
-		t.Fatalf("expected Sequence, got %+v", q)
+	s := mustAssertSeq(t, q)
+	if len(s.Steps) != 3 {
+		t.Fatalf("expected 3 steps, got %d: %+v", len(s.Steps), s)
 	}
-	if len(q.Children) != 3 {
-		t.Fatalf("expected 3 children, got %d: %+v", len(q.Children), q)
+	mustAssertField(t, s.Steps[0], "foo")
+
+	// bar[0] is parsed as a SeqExpr{bar, [0]?}
+	inner := mustAssertSeq(t, s.Steps[1])
+	if len(inner.Steps) != 2 {
+		t.Fatalf("expected 2 inner steps, got %d", len(inner.Steps))
 	}
-	if q.Children[0].Kind != QueryField || q.Children[0].Field != "foo" {
-		t.Fatalf("expected Field('foo'), got %+v", q.Children[0])
-	}
-	if q.Children[1].Kind != QuerySequence || len(q.Children[1].Children) != 2 {
-		t.Fatalf("expected Sequence(Field, Optional), got %+v", q.Children[1])
-	}
-	step := q.Children[1].Children
-	if step[0].Kind != QueryField || step[0].Field != "bar" {
-		t.Fatalf("expected Field('bar'), got %+v", step[0])
-	}
-	if step[1].Kind != QueryOptional {
-		t.Fatalf("expected Optional, got %+v", step[1])
-	}
-	optInner := step[1].Children[0]
-	if optInner.Kind != QueryIndex || optInner.Index != 0 {
-		t.Fatalf("expected Optional(Index(0)), got %+v", optInner)
-	}
-	if q.Children[2].Kind != QueryKleeneStar {
-		t.Fatalf("expected KleeneStar, got %+v", q.Children[2])
-	}
-	ks := q.Children[2].Children[0]
-	if ks.Kind != QueryField || ks.Field != "baz" {
-		t.Fatalf("expected KleeneStar(Field('baz')), got %+v", ks)
-	}
+	mustAssertField(t, inner.Steps[0], "bar")
+	opt := mustAssertOpt(t, inner.Steps[1])
+	mustAssertIndex(t, opt.Child, 0)
+
+	star := mustAssertStar(t, s.Steps[2])
+	mustAssertField(t, star.Child, "baz")
 }
 
 func TestParseGroup(t *testing.T) {
@@ -274,15 +321,12 @@ func TestParseGroup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if q.Kind != QuerySequence || len(q.Children) != 2 {
-		t.Fatalf("expected Sequence of 2, got %+v", q)
+	s := mustAssertSeq(t, q)
+	if len(s.Steps) != 2 {
+		t.Fatalf("expected 2 steps, got %d", len(s.Steps))
 	}
-	if q.Children[0].Kind != QueryDisjunction {
-		t.Fatalf("expected first child Disjunction, got %+v", q.Children[0])
-	}
-	if q.Children[1].Kind != QueryField || q.Children[1].Field != "baz" {
-		t.Fatalf("expected second child Field('baz'), got %+v", q.Children[1])
-	}
+	mustAssertDisj(t, s.Steps[0])
+	mustAssertField(t, s.Steps[1], "baz")
 }
 
 func TestParseAnyPathGroup(t *testing.T) {
@@ -290,21 +334,16 @@ func TestParseAnyPathGroup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if q.Kind != QueryKleeneStar {
-		t.Fatalf("expected KleeneStar, got %+v", q)
+	star := mustAssertStar(t, q)
+	d := mustAssertDisj(t, star.Child)
+	if len(d.Branches) != 2 {
+		t.Fatalf("expected 2 branches, got %d", len(d.Branches))
 	}
-	inner := q.Children[0]
-	if inner.Kind != QueryDisjunction {
-		t.Fatalf("expected Disjunction inside KleeneStar, got %+v", inner)
+	if _, ok := d.Branches[0].(WildcardExpr); !ok {
+		t.Fatalf("expected first branch WildcardExpr, got %T", d.Branches[0])
 	}
-	if len(inner.Children) != 2 {
-		t.Fatalf("expected 2 branches, got %d", len(inner.Children))
-	}
-	if inner.Children[0].Kind != QueryFieldWildcard {
-		t.Fatalf("expected first branch FieldWildcard, got %+v", inner.Children[0])
-	}
-	if inner.Children[1].Kind != QueryArrayWildcard {
-		t.Fatalf("expected second branch ArrayWildcard, got %+v", inner.Children[1])
+	if _, ok := d.Branches[1].(ArrayWildExpr); !ok {
+		t.Fatalf("expected second branch ArrayWildExpr, got %T", d.Branches[1])
 	}
 }
 
@@ -313,12 +352,11 @@ func TestParseNestedGroups(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if q.Kind != QueryDisjunction || len(q.Children) != 2 {
-		t.Fatalf("expected Disjunction of 2, got %+v", q)
+	d := mustAssertDisj(t, q)
+	if len(d.Branches) != 2 {
+		t.Fatalf("expected 2 branches, got %d", len(d.Branches))
 	}
-	if q.Children[0].Kind != QueryKleeneStar {
-		t.Fatalf("expected first branch KleeneStar, got %+v", q.Children[0])
-	}
+	mustAssertStar(t, d.Branches[0])
 }
 
 func TestParseGroupSequence(t *testing.T) {
@@ -326,12 +364,10 @@ func TestParseGroupSequence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if q.Kind != QueryOptional {
-		t.Fatalf("expected Optional, got %+v", q)
-	}
-	inner := q.Children[0]
-	if inner.Kind != QuerySequence || len(inner.Children) != 3 {
-		t.Fatalf("expected Sequence of 3 inside Optional, got %+v", inner)
+	o := mustAssertOpt(t, q)
+	inner := mustAssertSeq(t, o.Child)
+	if len(inner.Steps) != 3 {
+		t.Fatalf("expected 3 steps inside Optional, got %d", len(inner.Steps))
 	}
 }
 
@@ -340,9 +376,7 @@ func TestParseNestedGroupsTrivial(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if q.Kind != QueryField || q.Field != "foo" {
-		t.Fatalf("expected Field('foo'), got %+v", q)
-	}
+	mustAssertField(t, q, "foo")
 }
 
 func TestParseMultipleOptional(t *testing.T) {
@@ -350,8 +384,9 @@ func TestParseMultipleOptional(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if q.Kind != QuerySequence || len(q.Children) != 3 {
-		t.Fatalf("expected Sequence of 3, got %+v", q)
+	s := mustAssertSeq(t, q)
+	if len(s.Steps) != 3 {
+		t.Fatalf("expected 3 steps, got %d", len(s.Steps))
 	}
 }
 
@@ -360,18 +395,13 @@ func TestParseAnyPathInQuery(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if q.Kind != QuerySequence || len(q.Children) != 3 {
-		t.Fatalf("expected Sequence of 3, got %+v", q)
+	s := mustAssertSeq(t, q)
+	if len(s.Steps) != 3 {
+		t.Fatalf("expected 3 steps, got %d", len(s.Steps))
 	}
-	if q.Children[0].Kind != QueryField || q.Children[0].Field != "a" {
-		t.Fatalf("expected first child Field('a'), got %+v", q.Children[0])
-	}
-	if q.Children[1].Kind != QueryKleeneStar {
-		t.Fatalf("expected second child KleeneStar, got %+v", q.Children[1])
-	}
-	if q.Children[2].Kind != QueryOptional {
-		t.Fatalf("expected third child Optional, got %+v", q.Children[2])
-	}
+	mustAssertField(t, s.Steps[0], "a")
+	mustAssertStar(t, s.Steps[1])
+	mustAssertOpt(t, s.Steps[2])
 }
 
 func TestParseInvalidNumber(t *testing.T) {
@@ -414,9 +444,7 @@ func TestParseQuotedFieldWithReservedChars(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if q.Kind != QueryField || q.Field != ".|*?[]()/" {
-		t.Fatalf("expected Field('.|*?[]()/'), got %+v", q)
-	}
+	mustAssertField(t, q, ".|*?[]()/")
 }
 
 func TestParseQuotedFieldInSequence(t *testing.T) {
@@ -424,15 +452,12 @@ func TestParseQuotedFieldInSequence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if q.Kind != QuerySequence || len(q.Children) != 2 {
-		t.Fatalf("expected Sequence of 2, got %+v", q)
+	s := mustAssertSeq(t, q)
+	if len(s.Steps) != 2 {
+		t.Fatalf("expected 2 steps, got %d", len(s.Steps))
 	}
-	if q.Children[0].Field != "paths" {
-		t.Fatalf("expected first child 'paths', got %q", q.Children[0].Field)
-	}
-	if q.Children[1].Field != "/activities" {
-		t.Fatalf("expected second child '/activities', got %q", q.Children[1].Field)
-	}
+	mustAssertField(t, s.Steps[0], "paths")
+	mustAssertField(t, s.Steps[1], "/activities")
 }
 
 func TestParseQuotedFieldWithSlash(t *testing.T) {
@@ -440,9 +465,7 @@ func TestParseQuotedFieldWithSlash(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if q.Kind != QueryField || q.Field != "/activities" {
-		t.Fatalf("expected Field('/activities'), got %+v", q)
-	}
+	mustAssertField(t, q, "/activities")
 }
 
 func TestParseQuotedFieldWithDot(t *testing.T) {
@@ -450,9 +473,7 @@ func TestParseQuotedFieldWithDot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if q.Kind != QueryField || q.Field != "a.b" {
-		t.Fatalf("expected Field('a.b'), got %+v", q)
-	}
+	mustAssertField(t, q, "a.b")
 }
 
 func TestParseQuotedFieldUnescapeBackslash(t *testing.T) {
@@ -460,9 +481,7 @@ func TestParseQuotedFieldUnescapeBackslash(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if q.Kind != QueryField || q.Field != "a\\b" {
-		t.Fatalf("expected Field('a\\b'), got %+v", q)
-	}
+	mustAssertField(t, q, "a\\b")
 }
 
 func TestParseQuotedFieldUnescapeInnerQuote(t *testing.T) {
@@ -470,8 +489,12 @@ func TestParseQuotedFieldUnescapeInnerQuote(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if q.Kind != QueryField || q.Field != `a"b` {
-		t.Fatalf("expected Field('a\"b'), got %+v", q)
+	f, ok := q.(FieldExpr)
+	if !ok {
+		t.Fatalf("expected FieldExpr, got %T", q)
+	}
+	if f.Name != `a"b` {
+		t.Fatalf("expected 'a\"b', got %q", f.Name)
 	}
 }
 
@@ -480,9 +503,7 @@ func TestParseQuotedFieldUnescapeUnicode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if q.Kind != QueryField || q.Field != "A" {
-		t.Fatalf("expected Field('A'), got %+v", q)
-	}
+	mustAssertField(t, q, "A")
 }
 
 func TestParseQuotedFieldUnescapeEscapeSequences(t *testing.T) {
@@ -490,8 +511,12 @@ func TestParseQuotedFieldUnescapeEscapeSequences(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if q.Kind != QueryField || q.Field != "\n\r\t\b\f" {
-		t.Fatalf("expected Field with escape sequences, got %+v", q)
+	f, ok := q.(FieldExpr)
+	if !ok {
+		t.Fatalf("expected FieldExpr, got %T", q)
+	}
+	if f.Name != "\n\r\t\b\f" {
+		t.Fatalf("expected escape sequences, got %q", f.Name)
 	}
 }
 
@@ -500,12 +525,10 @@ func TestParseGroupAnyReservedCharsInDoubleQuotes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if q.Kind != QueryKleeneStar {
-		t.Fatalf("expected KleeneStar, got %+v", q)
-	}
-	inner := q.Children[0]
-	if inner.Kind != QueryDisjunction || len(inner.Children) != 9 {
-		t.Fatalf("expected Disjunction of 9, got %+v", inner)
+	star := mustAssertStar(t, q)
+	d := mustAssertDisj(t, star.Child)
+	if len(d.Branches) != 9 {
+		t.Fatalf("expected 9 branches, got %d", len(d.Branches))
 	}
 }
 
@@ -514,8 +537,9 @@ func TestParseWhitespaceAroundPipe(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if q.Kind != QueryDisjunction || len(q.Children) != 2 {
-		t.Fatalf("expected Disjunction of 2, got %+v", q)
+	d := mustAssertDisj(t, q)
+	if len(d.Branches) != 2 {
+		t.Fatalf("expected 2 branches, got %d", len(d.Branches))
 	}
 }
 
@@ -524,8 +548,9 @@ func TestParseThreeWayDisjunction(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if q.Kind != QueryDisjunction || len(q.Children) != 3 {
-		t.Fatalf("expected Disjunction of 3, got %+v", q)
+	d := mustAssertDisj(t, q)
+	if len(d.Branches) != 3 {
+		t.Fatalf("expected 3 branches, got %d", len(d.Branches))
 	}
 }
 
@@ -534,9 +559,7 @@ func TestParseFieldWithAlphanumeric(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if q.Kind != QueryField || q.Field != "foo123" {
-		t.Fatalf("expected Field('foo123'), got %+v", q)
-	}
+	mustAssertField(t, q, "foo123")
 }
 
 func TestParseFieldWithNumberAndIndex(t *testing.T) {
@@ -544,15 +567,12 @@ func TestParseFieldWithNumberAndIndex(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if q.Kind != QuerySequence || len(q.Children) != 2 {
-		t.Fatalf("expected Sequence(Field, Index), got %+v", q)
+	s := mustAssertSeq(t, q)
+	if len(s.Steps) != 2 {
+		t.Fatalf("expected 2 steps, got %d", len(s.Steps))
 	}
-	if q.Children[0].Field != "foo123" {
-		t.Fatalf("expected Field('foo123'), got %+v", q.Children[0])
-	}
-	if q.Children[1].Index != 42 {
-		t.Fatalf("expected Index(42), got %+v", q.Children[1])
-	}
+	mustAssertField(t, s.Steps[0], "foo123")
+	mustAssertIndex(t, s.Steps[1], 42)
 }
 
 func TestParseStandaloneIndexOptional(t *testing.T) {
@@ -560,13 +580,8 @@ func TestParseStandaloneIndexOptional(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if q.Kind != QueryOptional {
-		t.Fatalf("expected Optional, got %+v", q)
-	}
-	inner := q.Children[0]
-	if inner.Kind != QueryIndex || inner.Index != 3 {
-		t.Fatalf("expected Optional(Index(3)), got %+v", inner)
-	}
+	o := mustAssertOpt(t, q)
+	mustAssertIndex(t, o.Child, 3)
 }
 
 func TestParseWildcardOptional(t *testing.T) {
@@ -574,11 +589,9 @@ func TestParseWildcardOptional(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if q.Kind != QueryOptional {
-		t.Fatalf("expected Optional, got %+v", q)
-	}
-	if q.Children[0].Kind != QueryFieldWildcard {
-		t.Fatalf("expected Optional(FieldWildcard), got %+v", q.Children[0])
+	o := mustAssertOpt(t, q)
+	if _, ok := o.Child.(WildcardExpr); !ok {
+		t.Fatalf("expected Optional(WildcardExpr), got %T", o.Child)
 	}
 }
 
@@ -587,10 +600,8 @@ func TestParseArrayWildcardKleeneStar(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if q.Kind != QueryKleeneStar {
-		t.Fatalf("expected KleeneStar, got %+v", q)
-	}
-	if q.Children[0].Kind != QueryArrayWildcard {
-		t.Fatalf("expected KleeneStar(ArrayWildcard), got %+v", q.Children[0])
+	s := mustAssertStar(t, q)
+	if _, ok := s.Child.(ArrayWildExpr); !ok {
+		t.Fatalf("expected StarExpr(ArrayWildExpr), got %T", s.Child)
 	}
 }

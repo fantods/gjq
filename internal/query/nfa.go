@@ -6,68 +6,73 @@ import (
 	"strings"
 )
 
-type NFATransition struct {
+type nfaTransition struct {
 	LabelIdx int
 	Dest     int
 }
 
-type QueryNFA struct {
-	NumStates     int
-	StartState    int
-	Transitions   [][]NFATransition
-	PosToLabel    []TransitionLabel
-	IsAccepting   []bool
-	IsFirst       []bool
-	IsLast        []bool
-	Follows       [][]int
-	ContainsEmpty bool
+type nfa struct {
+	NumStates   int
+	StartState  int
+	Transitions [][]nfaTransition
+	PosToLabel  []TransitionLabel
+	IsAccepting []bool
+	IsFirst     []bool
+	IsLast      []bool
+	Follows     [][]int
+	IsEmpty     bool
 }
 
-func NewQueryNFA(q *Query) *QueryNFA {
-	var posToLabel []TransitionLabel
-	linearize(q, &posToLabel)
+// posNode carries the position range [start, end) for a subtree of the query.
+// It mirrors the Query tree structure but with concrete position indices,
+// replacing the *int cursor pattern and countPositions helper.
+type posNode struct {
+	start, end int       // half-open interval of position indices
+	query      Query     // original query (for type switching)
+	children   []posNode // child nodes for container types
+}
 
-	if len(posToLabel) == 0 {
-		return &QueryNFA{
-			NumStates:     1,
-			StartState:    0,
-			Transitions:   [][]NFATransition{{}},
-			PosToLabel:    nil,
-			IsAccepting:   []bool{true},
-			IsFirst:       nil,
-			IsLast:        nil,
-			Follows:       nil,
-			ContainsEmpty: true,
+func newNFA(q Query) *nfa {
+	labels, root := linearize(q)
+
+	if len(labels) == 0 {
+		return &nfa{
+			NumStates:   1,
+			StartState:  0,
+			Transitions: [][]nfaTransition{{}},
+			PosToLabel:  nil,
+			IsAccepting: []bool{true},
+			IsFirst:     nil,
+			IsLast:      nil,
+			Follows:     nil,
+			IsEmpty:     true,
 		}
 	}
 
-	alphaSize := len(posToLabel)
+	alphaSize := len(labels)
 	numStates := 1 + alphaSize
 
-	containsEmpty := computeContainsEmpty(q)
+	isEmpty := root.computeIsEmpty()
 
 	isFirst := make([]bool, alphaSize)
-	pos := 0
-	computeFirst(isFirst, q, &pos)
+	computeFirst(isFirst, root)
 
 	isLast := make([]bool, alphaSize)
-	pos = 0
-	computeLast(isLast, q, &pos)
+	computeLast(isLast, root)
 
 	follows := make([][]int, alphaSize)
-	pos = 0
-	computeFollows(follows, q, &pos)
+	computeFollows(follows, root)
 
-	transitions := make([][]NFATransition, numStates)
+	transitions := make([][]nfaTransition, numStates)
 	isAccepting := make([]bool, numStates)
 
-	if containsEmpty {
+	if isEmpty {
 		isAccepting[0] = true
 	}
 
 	for i, first := range isFirst {
 		if first {
-			transitions[0] = append(transitions[0], NFATransition{LabelIdx: i, Dest: i + 1})
+			transitions[0] = append(transitions[0], nfaTransition{LabelIdx: i, Dest: i + 1})
 		}
 	}
 
@@ -79,24 +84,24 @@ func NewQueryNFA(q *Query) *QueryNFA {
 
 	for from, followers := range follows {
 		for _, f := range followers {
-			transitions[from+1] = append(transitions[from+1], NFATransition{LabelIdx: f, Dest: f + 1})
+			transitions[from+1] = append(transitions[from+1], nfaTransition{LabelIdx: f, Dest: f + 1})
 		}
 	}
 
-	return &QueryNFA{
-		NumStates:     numStates,
-		StartState:    0,
-		Transitions:   transitions,
-		PosToLabel:    posToLabel,
-		IsAccepting:   isAccepting,
-		IsFirst:       isFirst,
-		IsLast:        isLast,
-		Follows:       follows,
-		ContainsEmpty: containsEmpty,
+	return &nfa{
+		NumStates:   numStates,
+		StartState:  0,
+		Transitions: transitions,
+		PosToLabel:  labels,
+		IsAccepting: isAccepting,
+		IsFirst:     isFirst,
+		IsLast:      isLast,
+		Follows:     follows,
+		IsEmpty:     isEmpty,
 	}
 }
 
-func (n *QueryNFA) String() string {
+func (n *nfa) String() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "NFA States: %d\n", n.NumStates)
 	fmt.Fprintf(&b, "Start State: %d\n", n.StartState)
@@ -108,7 +113,7 @@ func (n *QueryNFA) String() string {
 		}
 	}
 	fmt.Fprintf(&b, "Accepting States: %v\n", accepting)
-	fmt.Fprintf(&b, "ContainsEmpty: %v\n", n.ContainsEmpty)
+	fmt.Fprintf(&b, "IsEmpty: %v\n", n.IsEmpty)
 
 	fmt.Fprintf(&b, "First set: ")
 	for i, f := range n.IsFirst {
@@ -150,190 +155,197 @@ func (n *QueryNFA) String() string {
 	return b.String()
 }
 
-func linearize(q *Query, labels *[]TransitionLabel) {
-	switch q.Kind {
-	case QueryField:
-		*labels = append(*labels, TransitionLabel{Kind: LabelField, Field: q.Field})
-	case QueryFieldWildcard:
+// linearize walks the query tree, assigns sequential position indices to leaf
+// nodes, and returns both the ordered labels and a posNode tree carrying
+// position ranges for every subtree.
+func linearize(q Query) ([]TransitionLabel, posNode) {
+	var labels []TransitionLabel
+	node := doLinearize(q, &labels)
+	return labels, node
+}
+
+func doLinearize(q Query, labels *[]TransitionLabel) posNode {
+	switch v := q.(type) {
+	case FieldExpr:
+		start := len(*labels)
+		*labels = append(*labels, TransitionLabel{Kind: LabelField, Field: v.Name})
+		return posNode{start: start, end: start + 1, query: q}
+
+	case WildcardExpr:
+		start := len(*labels)
 		*labels = append(*labels, TransitionLabel{Kind: LabelFieldWildcard})
-	case QueryIndex:
-		*labels = append(*labels, TransitionLabel{Kind: LabelRange, RangeLo: q.Index, RangeHi: q.Index + 1})
-	case QueryRange:
-		*labels = append(*labels, TransitionLabel{Kind: LabelRange, RangeLo: q.Index, RangeHi: q.RangeEnd})
-	case QueryRangeFrom:
-		*labels = append(*labels, TransitionLabel{Kind: LabelRangeFrom, RangeLo: q.Index})
-	case QueryArrayWildcard:
+		return posNode{start: start, end: start + 1, query: q}
+
+	case IndexExpr:
+		start := len(*labels)
+		*labels = append(*labels, TransitionLabel{Kind: LabelRange, RangeLo: v.Index, RangeHi: v.Index + 1})
+		return posNode{start: start, end: start + 1, query: q}
+
+	case RangeExpr:
+		start := len(*labels)
+		*labels = append(*labels, TransitionLabel{Kind: LabelRange, RangeLo: v.Start, RangeHi: v.End})
+		return posNode{start: start, end: start + 1, query: q}
+
+	case RangeFromExpr:
+		start := len(*labels)
+		*labels = append(*labels, TransitionLabel{Kind: LabelRange, RangeLo: v.Start, RangeHi: math.MaxInt})
+		return posNode{start: start, end: start + 1, query: q}
+
+	case ArrayWildExpr:
+		start := len(*labels)
 		*labels = append(*labels, TransitionLabel{Kind: LabelRange, RangeLo: 0, RangeHi: math.MaxInt})
-	case QueryRegex:
+		return posNode{start: start, end: start + 1, query: q}
+
+	case RegexExpr:
+		start := len(*labels)
 		*labels = append(*labels, TransitionLabel{Kind: LabelFieldWildcard})
-	case QueryDisjunction, QuerySequence:
-		for _, c := range q.Children {
-			linearize(&c, labels)
+		return posNode{start: start, end: start + 1, query: q}
+
+	case DisjExpr:
+		start := len(*labels)
+		children := make([]posNode, len(v.Branches))
+		for i, c := range v.Branches {
+			children[i] = doLinearize(c, labels)
 		}
-	case QueryOptional, QueryKleeneStar:
-		linearize(&q.Children[0], labels)
+		return posNode{start: start, end: len(*labels), query: q, children: children}
+
+	case SeqExpr:
+		start := len(*labels)
+		children := make([]posNode, len(v.Steps))
+		for i, c := range v.Steps {
+			children[i] = doLinearize(c, labels)
+		}
+		return posNode{start: start, end: len(*labels), query: q, children: children}
+
+	case OptionalExpr:
+		start := len(*labels)
+		children := []posNode{doLinearize(v.Child, labels)}
+		return posNode{start: start, end: len(*labels), query: q, children: children}
+
+	case StarExpr:
+		start := len(*labels)
+		children := []posNode{doLinearize(v.Child, labels)}
+		return posNode{start: start, end: len(*labels), query: q, children: children}
+
+	default:
+		return posNode{}
 	}
 }
 
-func computeContainsEmpty(q *Query) bool {
-	switch q.Kind {
-	case QueryField, QueryIndex, QueryRange, QueryRangeFrom, QueryArrayWildcard, QueryFieldWildcard, QueryRegex:
+// computeIsEmpty returns true if the subtree can match the empty string.
+func (n posNode) computeIsEmpty() bool {
+	switch n.query.(type) {
+	case FieldExpr, IndexExpr, RangeExpr, RangeFromExpr, ArrayWildExpr, WildcardExpr, RegexExpr:
 		return false
-	case QuerySequence:
-		for _, c := range q.Children {
-			if !computeContainsEmpty(&c) {
+	case SeqExpr:
+		for _, c := range n.children {
+			if !c.computeIsEmpty() {
 				return false
 			}
 		}
 		return true
-	case QueryDisjunction:
-		for _, c := range q.Children {
-			if computeContainsEmpty(&c) {
+	case DisjExpr:
+		for _, c := range n.children {
+			if c.computeIsEmpty() {
 				return true
 			}
 		}
 		return false
-	case QueryOptional, QueryKleeneStar:
+	case OptionalExpr, StarExpr:
 		return true
 	default:
 		return false
 	}
 }
 
-func countPositions(q *Query) int {
-	switch q.Kind {
-	case QueryField, QueryIndex, QueryRange, QueryRangeFrom, QueryArrayWildcard, QueryFieldWildcard, QueryRegex:
-		return 1
-	case QuerySequence, QueryDisjunction:
-		sum := 0
-		for _, c := range q.Children {
-			sum += countPositions(&c)
-		}
-		return sum
-	case QueryOptional, QueryKleeneStar:
-		return countPositions(&q.Children[0])
+// isAtom returns true for leaf query types.
+func isAtom(q Query) bool {
+	switch q.(type) {
+	case FieldExpr, IndexExpr, RangeExpr, RangeFromExpr, ArrayWildExpr, WildcardExpr, RegexExpr:
+		return true
 	default:
-		return 0
+		return false
 	}
 }
 
-func computeFirst(first []bool, q *Query, pos *int) {
-	switch q.Kind {
-	case QueryField, QueryIndex, QueryRange, QueryRangeFrom, QueryArrayWildcard, QueryFieldWildcard, QueryRegex:
-		if *pos < len(first) {
-			first[*pos] = true
+// computeFirst sets the first-position set: positions that can be matched first.
+func computeFirst(first []bool, n posNode) {
+	if isAtom(n.query) {
+		first[n.start] = true
+		return
+	}
+	switch n.query.(type) {
+	case DisjExpr:
+		for _, c := range n.children {
+			computeFirst(first, c)
 		}
-		*pos++
-	case QueryDisjunction:
-		for _, c := range q.Children {
-			startPos := *pos
-			branchLen := countPositions(&c)
-			computeFirst(first, &c, pos)
-			*pos = startPos + branchLen
-		}
-	case QuerySequence:
-		for _, c := range q.Children {
-			computeFirst(first, &c, pos)
-			if !computeContainsEmpty(&c) {
+	case SeqExpr:
+		for _, c := range n.children {
+			computeFirst(first, c)
+			if !c.computeIsEmpty() {
 				break
 			}
 		}
-	case QueryOptional, QueryKleeneStar:
-		computeFirst(first, &q.Children[0], pos)
+	case OptionalExpr, StarExpr:
+		computeFirst(first, n.children[0])
 	}
 }
 
-func computeLast(last []bool, q *Query, pos *int) {
-	switch q.Kind {
-	case QueryField, QueryIndex, QueryRange, QueryRangeFrom, QueryArrayWildcard, QueryFieldWildcard, QueryRegex:
-		if *pos < len(last) {
-			last[*pos] = true
+// computeLast sets the last-position set: positions that can be matched last.
+func computeLast(last []bool, n posNode) {
+	if isAtom(n.query) {
+		last[n.start] = true
+		return
+	}
+	switch n.query.(type) {
+	case DisjExpr:
+		for _, c := range n.children {
+			computeLast(last, c)
 		}
-		*pos++
-	case QueryDisjunction:
-		for _, c := range q.Children {
-			startPos := *pos
-			branchLen := countPositions(&c)
-			computeLast(last, &c, pos)
-			*pos = startPos + branchLen
-		}
-	case QuerySequence:
-		subLengths := make([]int, len(q.Children))
-		for i, c := range q.Children {
-			subLengths[i] = countPositions(&c)
-		}
-		seqStart := *pos
-		for i := len(q.Children) - 1; i >= 0; i-- {
-			subStart := seqStart
-			for j := 0; j < i; j++ {
-				subStart += subLengths[j]
-			}
-			computeLast(last, &q.Children[i], &subStart)
-			if !computeContainsEmpty(&q.Children[i]) {
+	case SeqExpr:
+		for i := len(n.children) - 1; i >= 0; i-- {
+			computeLast(last, n.children[i])
+			if !n.children[i].computeIsEmpty() {
 				break
 			}
 		}
-		total := 0
-		for _, l := range subLengths {
-			total += l
-		}
-		*pos = seqStart + total
-	case QueryOptional, QueryKleeneStar:
-		computeLast(last, &q.Children[0], pos)
+	case OptionalExpr, StarExpr:
+		computeLast(last, n.children[0])
 	}
 }
 
-func computeFollows(follows [][]int, q *Query, pos *int) {
-	switch q.Kind {
-	case QueryField, QueryIndex, QueryRange, QueryRangeFrom, QueryArrayWildcard, QueryFieldWildcard, QueryRegex:
-		*pos++
+// computeFollows builds the follow-position set: for each position i, which
+// positions can immediately follow i in a successful match.
+func computeFollows(follows [][]int, n posNode) {
+	if isAtom(n.query) {
+		return
+	}
 
-	case QueryDisjunction:
-		for _, c := range q.Children {
-			computeFollows(follows, &c, pos)
+	switch n.query.(type) {
+	case DisjExpr:
+		for _, c := range n.children {
+			computeFollows(follows, c)
 		}
 
-	case QuerySequence:
-		type subRange struct{ start, end int }
-		ranges := make([]subRange, len(q.Children))
-		for i, c := range q.Children {
-			subStart := *pos
-			subLen := countPositions(&c)
-			computeFollows(follows, &c, pos)
-			ranges[i] = subRange{start: subStart, end: subStart + subLen}
+	case SeqExpr:
+		// Recurse into children first
+		for _, c := range n.children {
+			computeFollows(follows, c)
 		}
-
-		for i := 0; i < len(q.Children); i++ {
-			leftQuery := &q.Children[i]
-			leftStart := ranges[i].start
-			leftEnd := ranges[i].end
-
+		// For each adjacent pair of steps, link last(i) → first(j)
+		for i := 0; i < len(n.children); i++ {
+			left := n.children[i]
 			leftLast := make([]bool, len(follows))
-			leftPos := leftStart
-			computeLast(leftLast, leftQuery, &leftPos)
+			computeLast(leftLast, left)
 
-			for j := i + 1; j < len(q.Children); j++ {
-				canSkip := true
-				for k := i + 1; k < j; k++ {
-					if !computeContainsEmpty(&q.Children[k]) {
-						canSkip = false
-						break
-					}
-				}
-				if !canSkip {
-					continue
-				}
-
-				rightStart := ranges[j].start
-				rightEnd := ranges[j].end
-
+			for j := i + 1; j < len(n.children); j++ {
+				right := n.children[j]
 				rightFirst := make([]bool, len(follows))
-				rightPos := rightStart
-				computeFirst(rightFirst, &q.Children[j], &rightPos)
+				computeFirst(rightFirst, right)
 
-				for li := leftStart; li < leftEnd; li++ {
+				for li := left.start; li < left.end; li++ {
 					if leftLast[li] {
-						for ri := rightStart; ri < rightEnd; ri++ {
+						for ri := right.start; ri < right.end; ri++ {
 							if rightFirst[ri] {
 								follows[li] = append(follows[li], ri)
 							}
@@ -341,29 +353,25 @@ func computeFollows(follows [][]int, q *Query, pos *int) {
 					}
 				}
 
-				if !computeContainsEmpty(&q.Children[j]) {
+				if !right.computeIsEmpty() {
 					break
 				}
 			}
 		}
 
-	case QueryKleeneStar:
-		startPos := *pos
-		qLen := countPositions(&q.Children[0])
-
-		computeFollows(follows, &q.Children[0], pos)
+	case StarExpr:
+		child := n.children[0]
+		computeFollows(follows, child)
 
 		lastSet := make([]bool, len(follows))
-		lastPos := startPos
-		computeLast(lastSet, &q.Children[0], &lastPos)
+		computeLast(lastSet, child)
 
 		firstSet := make([]bool, len(follows))
-		firstPos := startPos
-		computeFirst(firstSet, &q.Children[0], &firstPos)
+		computeFirst(firstSet, child)
 
-		for i := startPos; i < startPos+qLen; i++ {
+		for i := child.start; i < child.end; i++ {
 			if lastSet[i] {
-				for j := startPos; j < startPos+qLen; j++ {
+				for j := child.start; j < child.end; j++ {
 					if firstSet[j] {
 						follows[i] = append(follows[i], j)
 					}
@@ -371,7 +379,7 @@ func computeFollows(follows [][]int, q *Query, pos *int) {
 			}
 		}
 
-	case QueryOptional:
-		computeFollows(follows, &q.Children[0], pos)
+	case OptionalExpr:
+		computeFollows(follows, n.children[0])
 	}
 }

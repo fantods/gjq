@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/fantods/gjq/internal/jsonutil"
 	"github.com/fantods/gjq/internal/output"
 	"github.com/fantods/gjq/internal/query"
 	"github.com/spf13/cobra"
@@ -94,13 +95,13 @@ func runRoot(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("reading input: %w", err)
 	}
 
-	root, err := query.ParseJSONFromBytes(data)
+	root, err := jsonutil.ParseBytes(data)
 	if err != nil {
 		fmt.Fprintln(cmd.ErrOrStderr(), err.Error())
 		return err
 	}
 
-	dfa := query.NewQueryDFA(&q, flagIgnoreCase)
+	dfa := query.Compile(q, query.WithCaseInsensitive())
 	results := dfa.Find(root)
 
 	showPath := resolveShowPath()

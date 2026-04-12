@@ -7,6 +7,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/fantods/gjq/internal/jsonutil"
 )
 
 func mustParseAnyJSON(t *testing.T, input string) interface{} {
@@ -17,7 +19,7 @@ func mustParseAnyJSON(t *testing.T, input string) interface{} {
 	if err := dec.Decode(&result); err != nil {
 		t.Fatalf("failed to parse JSON: %v", err)
 	}
-	return convertNumbers(result)
+	return jsonutil.ConvertNumbers(result)
 }
 
 var simpleJSON = `{
@@ -66,7 +68,7 @@ func mustParseQuery(t *testing.T, input string) Query {
 func TestDFAEmptyQuery(t *testing.T) {
 	json := mustParseJSON(t, simpleJSON)
 	q := NewSequence(nil)
-	dfa := NewQueryDFA(&q, false)
+	dfa := NewDFA(q, false)
 	results := dfa.Find(json)
 	if len(results) != 1 {
 		t.Fatalf("expected 1 match (identity), got %d", len(results))
@@ -76,7 +78,7 @@ func TestDFAEmptyQuery(t *testing.T) {
 func TestDFASingleField(t *testing.T) {
 	json := mustParseJSON(t, simpleJSON)
 	q := mustParseQuery(t, "foo")
-	dfa := NewQueryDFA(&q, false)
+	dfa := NewDFA(q, false)
 	results := dfa.Find(json)
 	if len(results) != 1 {
 		t.Fatalf("expected 1 match, got %d", len(results))
@@ -89,7 +91,7 @@ func TestDFASingleField(t *testing.T) {
 func TestDFAFieldSequence(t *testing.T) {
 	json := mustParseJSON(t, simpleJSON)
 	q := mustParseQuery(t, "foo.bar")
-	dfa := NewQueryDFA(&q, false)
+	dfa := NewDFA(q, false)
 	results := dfa.Find(json)
 	if len(results) != 1 {
 		t.Fatalf("expected 1 match, got %d", len(results))
@@ -103,7 +105,7 @@ func TestDFAFieldSequence(t *testing.T) {
 func TestDFADisjunction(t *testing.T) {
 	json := mustParseJSON(t, simpleJSON)
 	q := mustParseQuery(t, "foo | baz")
-	dfa := NewQueryDFA(&q, false)
+	dfa := NewDFA(q, false)
 	results := dfa.Find(json)
 	if len(results) != 2 {
 		t.Fatalf("expected 2 matches, got %d", len(results))
@@ -113,7 +115,7 @@ func TestDFADisjunction(t *testing.T) {
 func TestDFAIndexAccess(t *testing.T) {
 	json := mustParseJSON(t, simpleJSON)
 	q := mustParseQuery(t, "baz[1]")
-	dfa := NewQueryDFA(&q, false)
+	dfa := NewDFA(q, false)
 	results := dfa.Find(json)
 	if len(results) != 1 {
 		t.Fatalf("expected 1 match, got %d", len(results))
@@ -127,7 +129,7 @@ func TestDFAIndexAccess(t *testing.T) {
 func TestDFAArrayWildcard(t *testing.T) {
 	json := mustParseJSON(t, simpleJSON)
 	q := mustParseQuery(t, "baz[*]")
-	dfa := NewQueryDFA(&q, false)
+	dfa := NewDFA(q, false)
 	results := dfa.Find(json)
 	if len(results) != 5 {
 		t.Fatalf("expected 5 matches, got %d", len(results))
@@ -137,7 +139,7 @@ func TestDFAArrayWildcard(t *testing.T) {
 func TestDFABoundedRange(t *testing.T) {
 	json := mustParseJSON(t, simpleJSON)
 	q := mustParseQuery(t, "baz[1:4]")
-	dfa := NewQueryDFA(&q, false)
+	dfa := NewDFA(q, false)
 	results := dfa.Find(json)
 	if len(results) != 3 {
 		t.Fatalf("expected 3 matches, got %d", len(results))
@@ -147,7 +149,7 @@ func TestDFABoundedRange(t *testing.T) {
 func TestDFAUnboundedRangeFrom(t *testing.T) {
 	json := mustParseJSON(t, simpleJSON)
 	q := mustParseQuery(t, "baz[2:]")
-	dfa := NewQueryDFA(&q, false)
+	dfa := NewDFA(q, false)
 	results := dfa.Find(json)
 	if len(results) != 3 {
 		t.Fatalf("expected 3 matches, got %d", len(results))
@@ -157,7 +159,7 @@ func TestDFAUnboundedRangeFrom(t *testing.T) {
 func TestDFAUnboundedRangeTo(t *testing.T) {
 	json := mustParseJSON(t, simpleJSON)
 	q := mustParseQuery(t, "baz[:2]")
-	dfa := NewQueryDFA(&q, false)
+	dfa := NewDFA(q, false)
 	results := dfa.Find(json)
 	if len(results) != 2 {
 		t.Fatalf("expected 2 matches, got %d", len(results))
@@ -167,7 +169,7 @@ func TestDFAUnboundedRangeTo(t *testing.T) {
 func TestDFARangeAll(t *testing.T) {
 	json := mustParseJSON(t, simpleJSON)
 	q := mustParseQuery(t, "baz[:]")
-	dfa := NewQueryDFA(&q, false)
+	dfa := NewDFA(q, false)
 	results := dfa.Find(json)
 	if len(results) != 5 {
 		t.Fatalf("expected 5 matches, got %d", len(results))
@@ -177,7 +179,7 @@ func TestDFARangeAll(t *testing.T) {
 func TestDFAEmptyRange(t *testing.T) {
 	json := mustParseJSON(t, simpleJSON)
 	q := mustParseQuery(t, "baz[1:1]")
-	dfa := NewQueryDFA(&q, false)
+	dfa := NewDFA(q, false)
 	results := dfa.Find(json)
 	if len(results) != 0 {
 		t.Fatalf("expected 0 matches, got %d", len(results))
@@ -187,7 +189,7 @@ func TestDFAEmptyRange(t *testing.T) {
 func TestDFAOptionalField(t *testing.T) {
 	json := mustParseJSON(t, simpleJSON)
 	q := mustParseQuery(t, "other?")
-	dfa := NewQueryDFA(&q, false)
+	dfa := NewDFA(q, false)
 	results := dfa.Find(json)
 	if len(results) != 2 {
 		t.Fatalf("expected 2 matches, got %d", len(results))
@@ -197,7 +199,7 @@ func TestDFAOptionalField(t *testing.T) {
 func TestDFAKleeneStarSameKey(t *testing.T) {
 	json := mustParseJSON(t, duplicateKeyNestedJSON)
 	q := mustParseQuery(t, "c*")
-	dfa := NewQueryDFA(&q, false)
+	dfa := NewDFA(q, false)
 	results := dfa.Find(json)
 	if len(results) != 4 {
 		t.Fatalf("expected 4 matches, got %d", len(results))
@@ -207,7 +209,7 @@ func TestDFAKleeneStarSameKey(t *testing.T) {
 func TestDFAFieldWildcardNotRecursive(t *testing.T) {
 	json := mustParseJSON(t, nestedJSON)
 	q := mustParseQuery(t, "*.c")
-	dfa := NewQueryDFA(&q, false)
+	dfa := NewDFA(q, false)
 	results := dfa.Find(json)
 	if len(results) != 0 {
 		t.Fatalf("expected 0 matches (*.c is not recursive), got %d", len(results))
@@ -217,7 +219,7 @@ func TestDFAFieldWildcardNotRecursive(t *testing.T) {
 func TestDFAFieldWildcardNested(t *testing.T) {
 	json := mustParseJSON(t, nestedJSON)
 	q := mustParseQuery(t, "nested.*.*.c")
-	dfa := NewQueryDFA(&q, false)
+	dfa := NewDFA(q, false)
 	results := dfa.Find(json)
 	if len(results) != 1 {
 		t.Fatalf("expected 1 match, got %d", len(results))
@@ -227,7 +229,7 @@ func TestDFAFieldWildcardNested(t *testing.T) {
 func TestDFAFieldWildcardDeep(t *testing.T) {
 	json := mustParseJSON(t, nestedJSON)
 	q := mustParseQuery(t, "*.*.*.c")
-	dfa := NewQueryDFA(&q, false)
+	dfa := NewDFA(q, false)
 	results := dfa.Find(json)
 	if len(results) != 1 {
 		t.Fatalf("expected 1 match, got %d", len(results))
@@ -237,7 +239,7 @@ func TestDFAFieldWildcardDeep(t *testing.T) {
 func TestDFAFieldWildcardNonuniqueKeys(t *testing.T) {
 	json := mustParseJSON(t, duplicateKeyNestedJSON)
 	q := mustParseQuery(t, "c.*.c")
-	dfa := NewQueryDFA(&q, false)
+	dfa := NewDFA(q, false)
 	results := dfa.Find(json)
 	if len(results) != 1 {
 		t.Fatalf("expected 1 match, got %d", len(results))
@@ -247,7 +249,7 @@ func TestDFAFieldWildcardNonuniqueKeys(t *testing.T) {
 func TestDFAMultipleOptional(t *testing.T) {
 	json := mustParseJSON(t, duplicateKeyNestedJSON)
 	q := mustParseQuery(t, "c*.c?.c?")
-	dfa := NewQueryDFA(&q, false)
+	dfa := NewDFA(q, false)
 	results := dfa.Find(json)
 	if len(results) != 4 {
 		t.Fatalf("expected 4 matches, got %d", len(results))
@@ -265,7 +267,7 @@ func TestDFAKleeneStarRecursiveType(t *testing.T) {
 	}`
 	json := mustParseJSON(t, input)
 	q := mustParseQuery(t, "**.type")
-	dfa := NewQueryDFA(&q, false)
+	dfa := NewDFA(q, false)
 	results := dfa.Find(json)
 	if len(results) != 3 {
 		t.Fatalf("expected 3 matches, got %d", len(results))
@@ -276,7 +278,7 @@ func TestDFADisjunctionGroup(t *testing.T) {
 	input := `{"x": {"y": 5, "z": { "t": 2}}}`
 	json := mustParseJSON(t, input)
 	q := mustParseQuery(t, "x.(y | z.t)")
-	dfa := NewQueryDFA(&q, false)
+	dfa := NewDFA(q, false)
 	results := dfa.Find(json)
 	if len(results) != 2 {
 		t.Fatalf("expected 2 matches, got %d", len(results))
@@ -287,7 +289,7 @@ func TestDFARecursiveArrayIndexing(t *testing.T) {
 	input := `[[1], [2, 3]]`
 	js := mustParseAnyJSON(t, input)
 	q := mustParseQuery(t, "[*]*")
-	dfa := NewQueryDFA(&q, false)
+	dfa := NewDFA(q, false)
 	results := dfa.Find(js)
 	if len(results) != 6 {
 		t.Fatalf("expected 6 matches, got %d", len(results))
@@ -298,7 +300,7 @@ func TestDFARecursiveArrayIndexingAnyLevel(t *testing.T) {
 	input := `[[1], [2, 3]]`
 	json := mustParseAnyJSON(t, input)
 	q := mustParseQuery(t, "**.[*]*.[*]")
-	dfa := NewQueryDFA(&q, false)
+	dfa := NewDFA(q, false)
 	results := dfa.Find(json)
 	if len(results) != 5 {
 		t.Fatalf("expected 5 matches, got %d", len(results))
@@ -325,7 +327,7 @@ func TestDFARecursiveGeojsonAnyFieldsThenArrays(t *testing.T) {
 	}`
 	json := mustParseJSON(t, input)
 	q := mustParseQuery(t, "**.[*]*.[*]")
-	dfa := NewQueryDFA(&q, false)
+	dfa := NewDFA(q, false)
 	results := dfa.Find(json)
 	if len(results) != 1 {
 		t.Fatalf("expected 1 match, got %d", len(results))
@@ -352,7 +354,7 @@ func TestDFARecursiveGeojsonGroupAnyLevel(t *testing.T) {
 	}`
 	json := mustParseJSON(t, input)
 	q := mustParseQuery(t, "(* | [*])*.[*]")
-	dfa := NewQueryDFA(&q, false)
+	dfa := NewDFA(q, false)
 	results := dfa.Find(json)
 	if len(results) != 5 {
 		t.Fatalf("expected 5 matches, got %d", len(results))
@@ -362,7 +364,7 @@ func TestDFARecursiveGeojsonGroupAnyLevel(t *testing.T) {
 func TestDFAOverlappingRanges(t *testing.T) {
 	json := mustParseJSON(t, simpleJSON)
 	q := mustParseQuery(t, "baz[0:3] | baz[1:]")
-	dfa := NewQueryDFA(&q, false)
+	dfa := NewDFA(q, false)
 	results := dfa.Find(json)
 	if len(results) != 5 {
 		t.Fatalf("expected 5 matches (union of [0:3] and [1:]), got %d", len(results))
@@ -371,21 +373,21 @@ func TestDFAOverlappingRanges(t *testing.T) {
 
 func TestDFAConstruction(t *testing.T) {
 	q := mustParseQuery(t, "foo.bar")
-	dfa := NewQueryDFA(&q, false)
+	dfa := NewDFA(q, false)
 
-	if dfa.NumStates != 3 {
-		t.Fatalf("expected 3 states, got %d", dfa.NumStates)
+	if dfa.NumStatesForTest() != 3 {
+		t.Fatalf("expected 3 states, got %d", dfa.NumStatesForTest())
 	}
-	if !dfa.IsAccepting[2] {
+	if !dfa.IsAcceptingForTest()[2] {
 		t.Fatal("state 2 should be accepting")
 	}
-	if dfa.IsAccepting[0] || dfa.IsAccepting[1] {
+	if dfa.IsAcceptingForTest()[0] || dfa.IsAcceptingForTest()[1] {
 		t.Fatal("states 0 and 1 should not be accepting")
 	}
-	if _, ok := dfa.KeyToID["foo"]; !ok {
+	if _, ok := dfa.KeyToIDForTest()["foo"]; !ok {
 		t.Fatal("expected 'foo' in key_to_key_id")
 	}
-	if _, ok := dfa.KeyToID["bar"]; !ok {
+	if _, ok := dfa.KeyToIDForTest()["bar"]; !ok {
 		t.Fatal("expected 'bar' in key_to_key_id")
 	}
 }
@@ -394,7 +396,7 @@ func TestDFACaseInsensitive(t *testing.T) {
 	input := `{ "FOO": 1, "bar": 2 }`
 	json := mustParseJSON(t, input)
 	q := mustParseQuery(t, "foo")
-	dfa := NewQueryDFA(&q, true)
+	dfa := NewDFA(q, true)
 	results := dfa.Find(json)
 	if len(results) != 1 {
 		t.Fatalf("expected 1 match, got %d", len(results))
@@ -405,7 +407,7 @@ func TestDFACaseInsensitiveSequence(t *testing.T) {
 	input := `{ "Foo": { "BAR": "found" } }`
 	json := mustParseJSON(t, input)
 	q := mustParseQuery(t, "foo.bar")
-	dfa := NewQueryDFA(&q, true)
+	dfa := NewDFA(q, true)
 	results := dfa.Find(json)
 	if len(results) != 1 {
 		t.Fatalf("expected 1 match, got %d", len(results))
@@ -419,7 +421,7 @@ func TestDFACaseInsensitiveDisjunctionDedup(t *testing.T) {
 	input := `{ "foo": 1, "bar": 2 }`
 	json := mustParseJSON(t, input)
 	q := mustParseQuery(t, "Foo | foo")
-	dfa := NewQueryDFA(&q, true)
+	dfa := NewDFA(q, true)
 	results := dfa.Find(json)
 	if len(results) != 1 {
 		t.Fatalf("expected 1 match (deduped), got %d", len(results))
@@ -430,7 +432,7 @@ func TestDFACaseSensitiveDefault(t *testing.T) {
 	input := `{ "FOO": 1, "foo": 2 }`
 	json := mustParseJSON(t, input)
 	q := mustParseQuery(t, "foo")
-	dfa := NewQueryDFA(&q, false)
+	dfa := NewDFA(q, false)
 	results := dfa.Find(json)
 	if len(results) != 1 {
 		t.Fatalf("expected 1 match, got %d", len(results))
@@ -444,7 +446,7 @@ func TestDFAQuotedFieldWithSlash(t *testing.T) {
 	input := `{ "/activities": { "get": "list" } }`
 	json := mustParseJSON(t, input)
 	q := mustParseQuery(t, `"/activities"`)
-	dfa := NewQueryDFA(&q, false)
+	dfa := NewDFA(q, false)
 	results := dfa.Find(json)
 	if len(results) != 1 {
 		t.Fatalf("expected 1 match, got %d", len(results))
@@ -460,7 +462,7 @@ func TestDFAQuotedFieldSequence(t *testing.T) {
 	}`
 	json := mustParseJSON(t, input)
 	q := mustParseQuery(t, `paths."/activities"`)
-	dfa := NewQueryDFA(&q, false)
+	dfa := NewDFA(q, false)
 	results := dfa.Find(json)
 	if len(results) != 1 {
 		t.Fatalf("expected 1 match, got %d", len(results))
@@ -471,7 +473,7 @@ func TestDFAQuotedFieldWithDot(t *testing.T) {
 	input := `{ "a.b": 42, "a": { "b": 99 } }`
 	json := mustParseJSON(t, input)
 	q := mustParseQuery(t, `"a.b"`)
-	dfa := NewQueryDFA(&q, false)
+	dfa := NewDFA(q, false)
 	results := dfa.Find(json)
 	if len(results) != 1 {
 		t.Fatalf("expected 1 match, got %d", len(results))
@@ -490,7 +492,7 @@ func TestDFAQuotedFieldDisjunction(t *testing.T) {
 	}`
 	json := mustParseJSON(t, input)
 	q := mustParseQuery(t, `paths.("/activities" | "/users")`)
-	dfa := NewQueryDFA(&q, false)
+	dfa := NewDFA(q, false)
 	results := dfa.Find(json)
 	if len(results) != 2 {
 		t.Fatalf("expected 2 matches, got %d", len(results))
@@ -499,7 +501,7 @@ func TestDFAQuotedFieldDisjunction(t *testing.T) {
 
 func TestDFAFieldSymbolIDLookup(t *testing.T) {
 	q := mustParseQuery(t, "foo.bar")
-	dfa := NewQueryDFA(&q, false)
+	dfa := NewDFA(q, false)
 	fooID := dfa.FieldSymbolID("foo")
 	barID := dfa.FieldSymbolID("bar")
 	otherID := dfa.FieldSymbolID("unknown")
@@ -513,7 +515,7 @@ func TestDFAFieldSymbolIDLookup(t *testing.T) {
 
 func TestDFAIndexSymbolIDLookup(t *testing.T) {
 	q := mustParseQuery(t, "baz[2:5]")
-	dfa := NewQueryDFA(&q, false)
+	dfa := NewDFA(q, false)
 
 	for i := 2; i < 5; i++ {
 		id, ok := dfa.IndexSymbolID(i)
@@ -529,7 +531,7 @@ func TestDFAIndexSymbolIDLookup(t *testing.T) {
 
 func TestDFATransition(t *testing.T) {
 	q := mustParseQuery(t, "foo.bar")
-	dfa := NewQueryDFA(&q, false)
+	dfa := NewDFA(q, false)
 	fooID := dfa.FieldSymbolID("foo")
 	barID := dfa.FieldSymbolID("bar")
 	otherID := dfa.FieldSymbolID("baz")
@@ -539,7 +541,7 @@ func TestDFATransition(t *testing.T) {
 		t.Fatal("expected transition on foo from state 0")
 	}
 	next2, ok := dfa.Transition(next, barID)
-	if !ok || !dfa.IsAccepting[next2] {
+	if !ok || !dfa.IsAcceptingState(next2) {
 		t.Fatal("expected transition on bar leading to accepting state")
 	}
 	_, ok = dfa.Transition(0, otherID)
@@ -550,9 +552,9 @@ func TestDFATransition(t *testing.T) {
 
 func TestDFANoRangeOverlaps(t *testing.T) {
 	q := mustParseQuery(t, "foo[1:5].baz[2]")
-	dfa := NewQueryDFA(&q, false)
+	dfa := NewDFA(q, false)
 	prevEnd := 0
-	for _, re := range dfa.Ranges {
+	for _, re := range dfa.RangesForTest() {
 		if re.Start < prevEnd {
 			t.Fatalf("overlapping range detected: [%d,%d) overlaps with previous end %d", re.Start, re.End, prevEnd)
 		}
@@ -562,7 +564,7 @@ func TestDFANoRangeOverlaps(t *testing.T) {
 
 func TestDFARangeFromLookup(t *testing.T) {
 	q := mustParseQuery(t, "baz[3:]")
-	dfa := NewQueryDFA(&q, false)
+	dfa := NewDFA(q, false)
 	id, ok := dfa.IndexSymbolID(5)
 	if !ok {
 		t.Fatal("expected index 5 to be found in range [3, MaxInt)")
@@ -578,7 +580,7 @@ func TestDFAGetAllArrayAfterField(t *testing.T) {
 	input := `{ "root": [["1", "2"], ["3"]] }`
 	json := mustParseJSON(t, input)
 	q := mustParseQuery(t, "**.[*]")
-	dfa := NewQueryDFA(&q, false)
+	dfa := NewDFA(q, false)
 	results := dfa.Find(json)
 	if len(results) != 2 {
 		t.Fatalf("expected 2 matches, got %d", len(results))
@@ -589,7 +591,7 @@ func TestDFATwoFieldWildcards(t *testing.T) {
 	input := `{ "root": { "foo": "bar" } }`
 	json := mustParseJSON(t, input)
 	q := mustParseQuery(t, "*.*")
-	dfa := NewQueryDFA(&q, false)
+	dfa := NewDFA(q, false)
 	results := dfa.Find(json)
 	if len(results) != 1 {
 		t.Fatalf("expected 1 match, got %d", len(results))
@@ -600,7 +602,7 @@ func TestDFAArrayObjNoFields(t *testing.T) {
 	input := `[{"root": { "foo": "bar" }}]`
 	json := mustParseAnyJSON(t, input)
 	q := mustParseQuery(t, "*.*")
-	dfa := NewQueryDFA(&q, false)
+	dfa := NewDFA(q, false)
 	results := dfa.Find(json)
 	if len(results) != 0 {
 		t.Fatalf("expected 0 matches (array root, no field match), got %d", len(results))
@@ -616,7 +618,7 @@ func TestDFACaseInsensitiveRecursiveWildcard(t *testing.T) {
 	}`
 	json := mustParseJSON(t, input)
 	q := mustParseQuery(t, "**.foo")
-	dfa := NewQueryDFA(&q, true)
+	dfa := NewDFA(q, true)
 	results := dfa.Find(json)
 	if len(results) != 2 {
 		t.Fatalf("expected 2 matches, got %d", len(results))
@@ -625,7 +627,7 @@ func TestDFACaseInsensitiveRecursiveWildcard(t *testing.T) {
 
 func TestDFAIndexSymbolIDBinarySearchCorrectness(t *testing.T) {
 	q := mustParseQuery(t, "a[0:10] | a[5:20] | a[15:100]")
-	dfa := NewQueryDFA(&q, false)
+	dfa := NewDFA(q, false)
 
 	type expectation struct {
 		index       int
@@ -666,7 +668,7 @@ func TestDFAIndexSymbolIDBinarySearchCorrectness(t *testing.T) {
 
 func TestDFAIndexSymbolIDBinarySearchOverlappingRanges(t *testing.T) {
 	q := mustParseQuery(t, "x[0:3] | x[2:5] | x[4:8]")
-	dfa := NewQueryDFA(&q, false)
+	dfa := NewDFA(q, false)
 
 	for i := 0; i < 8; i++ {
 		id, ok := dfa.IndexSymbolID(i)
@@ -689,7 +691,7 @@ func TestDFAIndexSymbolIDBinarySearchOverlappingRanges(t *testing.T) {
 
 func TestDFAIndexSymbolIDBinarySearchSingleRange(t *testing.T) {
 	q := mustParseQuery(t, "a[3:7]")
-	dfa := NewQueryDFA(&q, false)
+	dfa := NewDFA(q, false)
 
 	for i := 3; i < 7; i++ {
 		id, ok := dfa.IndexSymbolID(i)
@@ -707,7 +709,7 @@ func TestDFAIndexSymbolIDBinarySearchSingleRange(t *testing.T) {
 
 func TestDFAIndexSymbolIDBinarySearchArrayWildcard(t *testing.T) {
 	q := mustParseQuery(t, "a[*]")
-	dfa := NewQueryDFA(&q, false)
+	dfa := NewDFA(q, false)
 
 	for _, idx := range []int{0, 1, 50, 9999} {
 		id, ok := dfa.IndexSymbolID(idx)
@@ -719,7 +721,7 @@ func TestDFAIndexSymbolIDBinarySearchArrayWildcard(t *testing.T) {
 
 func BenchmarkIndexSymbolID(b *testing.B) {
 	q := mustParseQueryB(b, "a[0:10] | a[5:50] | a[40:200] | a[150:500] | a[400:1000]")
-	dfa := NewQueryDFA(&q, false)
+	dfa := NewDFA(q, false)
 
 	indices := make([]int, 1000)
 	for i := range indices {
@@ -755,11 +757,11 @@ func TestParseJSONFromBytesEquivalence(t *testing.T) {
 		`{}`,
 	}
 	for _, input := range inputs {
-		resultStr, err := ParseJSON(input)
+		resultStr, err := jsonutil.Parse(input)
 		if err != nil {
 			t.Fatalf("ParseJSON(%q) error: %v", input, err)
 		}
-		resultBytes, err := ParseJSONFromBytes([]byte(input))
+		resultBytes, err := jsonutil.ParseBytes([]byte(input))
 		if err != nil {
 			t.Fatalf("ParseJSONFromBytes(%q) error: %v", input, err)
 		}
@@ -771,7 +773,7 @@ func TestParseJSONFromBytesEquivalence(t *testing.T) {
 
 func TestParseJSONFromBytesNumberConversion(t *testing.T) {
 	input := `{"int_val": 42, "float_val": 3.14, "big_int": 999999999999}`
-	result, err := ParseJSONFromBytes([]byte(input))
+	result, err := jsonutil.ParseBytes([]byte(input))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -798,7 +800,7 @@ func BenchmarkParseJSONString(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := ParseJSON(data)
+		_, err := jsonutil.Parse(data)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -819,7 +821,7 @@ func BenchmarkParseJSONBytes(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := ParseJSONFromBytes(data)
+		_, err := jsonutil.ParseBytes(data)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -851,7 +853,7 @@ var deepJSON = `{
 func TestDFAFindDeepPathCorrectness(t *testing.T) {
 	root := mustParseJSON(t, deepJSON)
 	q := mustParseQuery(t, "l1.l2.l3.l4.l5.l6.l7.l8.l9.l10")
-	dfa := NewQueryDFA(&q, false)
+	dfa := NewDFA(q, false)
 	results := dfa.Find(root)
 	if len(results) != 1 {
 		t.Fatalf("expected 1 match, got %d", len(results))
@@ -877,7 +879,7 @@ func TestDFAFindMultipleDeepPaths(t *testing.T) {
 	}`
 	root := mustParseJSON(t, input)
 	q := mustParseQuery(t, "*.*.*.target")
-	dfa := NewQueryDFA(&q, false)
+	dfa := NewDFA(q, false)
 	results := dfa.Find(root)
 	if len(results) != 2 {
 		t.Fatalf("expected 2 matches, got %d", len(results))
@@ -901,7 +903,7 @@ func TestDFAFindMultipleDeepPaths(t *testing.T) {
 func BenchmarkDFAFind(b *testing.B) {
 	root := mustParseAnyJSONB(b, deepJSON)
 	q := mustParseQueryB(b, "l1.l2.l3.l4.l5.l6.l7.l8.l9.l10")
-	dfa := NewQueryDFA(&q, false)
+	dfa := NewDFA(q, false)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -920,7 +922,7 @@ func BenchmarkDFAFindWildcard(b *testing.B) {
 	input += `]}`
 	root := mustParseAnyJSONB(b, input)
 	q := mustParseQueryB(b, "items[*].tags[*]")
-	dfa := NewQueryDFA(&q, false)
+	dfa := NewDFA(q, false)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -936,7 +938,7 @@ func mustParseAnyJSONB(b *testing.B, input string) interface{} {
 	if err := dec.Decode(&result); err != nil {
 		b.Fatalf("failed to parse JSON: %v", err)
 	}
-	return convertNumbers(result)
+	return jsonutil.ConvertNumbers(result)
 }
 
 func loadRandomUserJSON(b *testing.B) interface{} {
@@ -945,7 +947,7 @@ func loadRandomUserJSON(b *testing.B) interface{} {
 	if err != nil {
 		b.Fatalf("failed to load randomusers.json: %v", err)
 	}
-	root, err := ParseJSONFromBytes(data)
+	root, err := jsonutil.ParseBytes(data)
 	if err != nil {
 		b.Fatalf("failed to parse randomusers.json: %v", err)
 	}
@@ -959,7 +961,7 @@ func BenchmarkRandomUserParse(b *testing.B) {
 	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := ParseJSONFromBytes(data)
+		_, err := jsonutil.ParseBytes(data)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -969,7 +971,7 @@ func BenchmarkRandomUserParse(b *testing.B) {
 func BenchmarkRandomUserFindNat(b *testing.B) {
 	root := loadRandomUserJSON(b)
 	q := mustParseQueryB(b, "results[*].nat")
-	dfa := NewQueryDFA(&q, false)
+	dfa := NewDFA(q, false)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		dfa.Find(root)
@@ -979,7 +981,7 @@ func BenchmarkRandomUserFindNat(b *testing.B) {
 func BenchmarkRandomUserFindLastName(b *testing.B) {
 	root := loadRandomUserJSON(b)
 	q := mustParseQueryB(b, "results[*].name[*].last")
-	dfa := NewQueryDFA(&q, false)
+	dfa := NewDFA(q, false)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		dfa.Find(root)
@@ -989,7 +991,7 @@ func BenchmarkRandomUserFindLastName(b *testing.B) {
 func BenchmarkRandomUserFindRecursive(b *testing.B) {
 	root := loadRandomUserJSON(b)
 	q := mustParseQueryB(b, "**.first")
-	dfa := NewQueryDFA(&q, false)
+	dfa := NewDFA(q, false)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		dfa.Find(root)
@@ -999,7 +1001,7 @@ func BenchmarkRandomUserFindRecursive(b *testing.B) {
 func BenchmarkRandomUserFindCaseInsensitive(b *testing.B) {
 	root := loadRandomUserJSON(b)
 	q := mustParseQueryB(b, "**.first")
-	dfa := NewQueryDFA(&q, true)
+	dfa := NewDFA(q, true)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		dfa.Find(root)
@@ -1015,7 +1017,7 @@ func BenchmarkRandomUserFindFixedString(b *testing.B) {
 		})),
 		NewField("email"),
 	})
-	dfa := NewQueryDFA(&q, false)
+	dfa := NewDFA(q, false)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		dfa.Find(root)
