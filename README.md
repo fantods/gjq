@@ -198,19 +198,19 @@ Iterations: 20
 
 Benchmark                      |   gjq (ms) |    jq (ms) |  Speedup
 ------------------------------------------------------------------------
-results.nat                    |     9.84ms |    11.65ms |    1.18x
-results.name.last              |     8.96ms |    11.76ms |    1.31x
-recursive first                |     2.25ms |     2.46ms |    1.09x
-recursive email (-F)           |     2.12ms |     2.17ms |    1.02x
-results.location.country       |    10.11ms |    12.62ms |    1.25x
-case-insensitive first         |     2.40ms |     2.27ms |    0.95x
-simple: name                   |     2.29ms |     2.69ms |    1.17x
-simple: name.first             |     2.45ms |     2.98ms |    1.22x
-simple: hobbies[0]             |     2.75ms |     2.91ms |    1.06x
-simple: wildcard *             |     2.24ms |     2.61ms |    1.17x
-nested: users[*].name          |     2.17ms |     2.53ms |    1.17x
-nested: deep recursive         |     2.15ms |     2.40ms |    1.12x
-openapi: *.*.summary           |     2.22ms |     2.58ms |    1.16x
+results.nat                    |     9.01ms |    11.30ms |    1.25x
+results.name.last              |     8.99ms |    11.22ms |    1.25x
+recursive first                |     2.08ms |     2.17ms |    1.04x
+recursive email (-F)           |     2.22ms |     2.22ms |    1.00x
+results.location.country       |     9.61ms |    11.57ms |    1.20x
+case-insensitive first         |     2.23ms |     2.31ms |    1.04x
+simple: name                   |     2.27ms |     2.64ms |    1.16x
+simple: name.first             |     2.16ms |     2.61ms |    1.21x
+simple: hobbies[0]             |     2.22ms |     2.63ms |    1.18x
+simple: wildcard *             |     2.18ms |     2.65ms |    1.22x
+nested: users[*].name          |     2.20ms |     2.60ms |    1.18x
+nested: deep recursive         |     2.24ms |     2.12ms |    0.95x
+openapi: *.*.summary           |     2.20ms |     2.57ms |    1.17x
 ```
 
 **Query details** (randomusers.json, 1 MB):
