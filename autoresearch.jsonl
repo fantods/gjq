@@ -1,0 +1,1 @@
+{"type":"config","name":"Optimizing gjq performance (bench/bench.sh)","metricName":"gjq_median_ms","metricUnit":"ms","bestDirection":"lower"}
