@@ -101,7 +101,11 @@ func runRoot(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	dfa := query.Compile(q, query.WithCaseInsensitive())
+	var opts []query.Option
+	if flagIgnoreCase {
+		opts = append(opts, query.WithCaseInsensitive())
+	}
+	dfa := query.Compile(q, opts...)
 	results := dfa.Find(root)
 
 	showPath := resolveShowPath()
