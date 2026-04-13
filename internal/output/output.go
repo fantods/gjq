@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/fantods/gjq/internal/query"
@@ -173,8 +175,10 @@ func writeColor(w io.Writer, text, code string, colorize bool) {
 }
 
 func formatFloat(f float64) string {
-	s := fmt.Sprintf("%g", f)
-	return s
+	if f == float64(int(f)) && !math.IsInf(f, 0) && !math.IsNaN(f) {
+		return strconv.FormatInt(int64(f), 10)
+	}
+	return strconv.FormatFloat(f, 'f', -1, 64)
 }
 
 func isBrokenPipe(err error) bool {

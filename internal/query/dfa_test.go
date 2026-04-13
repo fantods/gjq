@@ -15,11 +15,11 @@ func mustParseAnyJSON(t *testing.T, input string) interface{} {
 	t.Helper()
 	var result interface{}
 	dec := json.NewDecoder(strings.NewReader(input))
-	dec.UseNumber()
+
 	if err := dec.Decode(&result); err != nil {
 		t.Fatalf("failed to parse JSON: %v", err)
 	}
-	return jsonutil.ConvertNumbers(result)
+	return result
 }
 
 var simpleJSON = `{
@@ -437,7 +437,7 @@ func TestDFACaseSensitiveDefault(t *testing.T) {
 	if len(results) != 1 {
 		t.Fatalf("expected 1 match, got %d", len(results))
 	}
-	if n, ok := results[0].Value.(int); !ok || n != 2 {
+	if n, ok := results[0].Value.(float64); !ok || n != 2 {
 		t.Fatalf("expected 2, got %v", results[0].Value)
 	}
 }
@@ -478,7 +478,7 @@ func TestDFAQuotedFieldWithDot(t *testing.T) {
 	if len(results) != 1 {
 		t.Fatalf("expected 1 match, got %d", len(results))
 	}
-	if n, ok := results[0].Value.(int); !ok || n != 42 {
+	if n, ok := results[0].Value.(float64); !ok || n != 42 {
 		t.Fatalf("expected 42 (from literal key 'a.b'), got %v", results[0].Value)
 	}
 }
@@ -771,15 +771,15 @@ func TestParseJSONFromBytesEquivalence(t *testing.T) {
 	}
 }
 
-func TestParseJSONFromBytesNumberConversion(t *testing.T) {
+func TestParseJSONFromBytesNumberRepresentation(t *testing.T) {
 	input := `{"int_val": 42, "float_val": 3.14, "big_int": 999999999999}`
 	result, err := jsonutil.ParseBytes([]byte(input))
 	if err != nil {
 		t.Fatal(err)
 	}
 	m := result.(map[string]interface{})
-	if v, ok := m["int_val"].(int); !ok || v != 42 {
-		t.Fatalf("expected int 42, got %v", m["int_val"])
+	if v, ok := m["int_val"].(float64); !ok || v != 42 {
+		t.Fatalf("expected float64 42, got %v", m["int_val"])
 	}
 	if v, ok := m["float_val"].(float64); !ok || v != 3.14 {
 		t.Fatalf("expected float64 3.14, got %v", m["float_val"])
@@ -884,9 +884,9 @@ func TestDFAFindMultipleDeepPaths(t *testing.T) {
 	if len(results) != 2 {
 		t.Fatalf("expected 2 matches, got %d", len(results))
 	}
-	vals := map[int]bool{}
+	vals := map[float64]bool{}
 	for _, r := range results {
-		if v, ok := r.Value.(int); ok {
+		if v, ok := r.Value.(float64); ok {
 			vals[v] = true
 		}
 	}
@@ -934,11 +934,11 @@ func mustParseAnyJSONB(b *testing.B, input string) interface{} {
 	b.Helper()
 	var result interface{}
 	dec := json.NewDecoder(strings.NewReader(input))
-	dec.UseNumber()
+
 	if err := dec.Decode(&result); err != nil {
 		b.Fatalf("failed to parse JSON: %v", err)
 	}
-	return jsonutil.ConvertNumbers(result)
+	return result
 }
 
 func loadRandomUserJSON(b *testing.B) interface{} {

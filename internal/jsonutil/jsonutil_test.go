@@ -11,8 +11,8 @@ func TestParseString(t *testing.T) {
 		t.Fatal(err)
 	}
 	m := result.(map[string]interface{})
-	if v, ok := m["a"].(int); !ok || v != 1 {
-		t.Fatalf("expected int 1, got %v", m["a"])
+	if v, ok := m["a"].(float64); !ok || v != 1 {
+		t.Fatalf("expected float64 1, got %v", m["a"])
 	}
 	if v, ok := m["b"].(string); !ok || v != "hello" {
 		t.Fatalf("expected string 'hello', got %v", m["b"])
@@ -25,8 +25,8 @@ func TestParseBytes(t *testing.T) {
 		t.Fatal(err)
 	}
 	m := result.(map[string]interface{})
-	if v, ok := m["x"].(int); !ok || v != 42 {
-		t.Fatalf("expected int 42, got %v", m["x"])
+	if v, ok := m["x"].(float64); !ok || v != 42 {
+		t.Fatalf("expected float64 42, got %v", m["x"])
 	}
 }
 
@@ -57,15 +57,15 @@ func TestParseEquivalence(t *testing.T) {
 	}
 }
 
-func TestNumberConversion(t *testing.T) {
+func TestNumberRepresentation(t *testing.T) {
 	input := `{"int_val": 42, "float_val": 3.14, "big_int": 999999999999}`
 	result, err := ParseBytes([]byte(input))
 	if err != nil {
 		t.Fatal(err)
 	}
 	m := result.(map[string]interface{})
-	if v, ok := m["int_val"].(int); !ok || v != 42 {
-		t.Fatalf("expected int 42, got %v", m["int_val"])
+	if v, ok := m["int_val"].(float64); !ok || v != 42 {
+		t.Fatalf("expected float64 42, got %v", m["int_val"])
 	}
 	if v, ok := m["float_val"].(float64); !ok || v != 3.14 {
 		t.Fatalf("expected float64 3.14, got %v", m["float_val"])
@@ -101,8 +101,8 @@ func TestParseNestedObject(t *testing.T) {
 	}
 	outer := result.(map[string]interface{})["outer"].(map[string]interface{})
 	inner := outer["inner"].(map[string]interface{})
-	if v, ok := inner["value"].(int); !ok || v != 42 {
-		t.Fatalf("expected int 42, got %v", inner["value"])
+	if v, ok := inner["value"].(float64); !ok || v != 42 {
+		t.Fatalf("expected float64 42, got %v", inner["value"])
 	}
 }
 
