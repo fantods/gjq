@@ -19,6 +19,6 @@ func NewQueryNFA(q Query) *nfa {
 // DFA accessors for testing.
 
 func (d *DFA) NumStatesForTest() int          { return d.numStates }
-func (d *DFA) IsAcceptingForTest() []bool      { return d.isAccepting }
-func (d *DFA) KeyToIDForTest() map[string]int  { return d.keyToID }
-func (d *DFA) RangesForTest() []rangeEntry     { return d.ranges }
+func (d *DFA) IsAcceptingForTest() []bool     { return d.isAccepting }
+func (d *DFA) KeyToIDForTest() map[string]int { return d.keyToID }
+func (d *DFA) RangesForTest() []rangeEntry    { return d.ranges }

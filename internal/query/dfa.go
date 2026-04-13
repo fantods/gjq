@@ -386,5 +386,3 @@ func nfaLabelMatchesDFA(nfaLabel, dfaSym TransitionLabel, caseInsensitive bool) 
 	}
 	return false
 }
-
-

@@ -16,5 +16,3 @@ func ParseBytes(data []byte) (interface{}, error) {
 	}
 	return result, nil
 }
-
-

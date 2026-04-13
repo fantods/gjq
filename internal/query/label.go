@@ -9,10 +9,10 @@ import (
 type LabelKind int
 
 const (
-	LabelField        LabelKind = iota // Matches a specific object key
-	LabelFieldWildcard                 // Matches any object key
-	LabelRange                         // Matches array indices in [RangeLo, RangeHi)
-	LabelOther                         // Matches keys/indices not in the query
+	LabelField         LabelKind = iota // Matches a specific object key
+	LabelFieldWildcard                  // Matches any object key
+	LabelRange                          // Matches array indices in [RangeLo, RangeHi)
+	LabelOther                          // Matches keys/indices not in the query
 )
 
 // TransitionLabel represents one symbol in the DFA alphabet.
