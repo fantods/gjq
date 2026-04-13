@@ -58,14 +58,25 @@ func NewDFA(q Query, caseInsensitive bool) *DFA {
 // FieldSymbolID returns the alphabet symbol ID for a field name.
 // Returns 0 (the "other" symbol) if the field is not in the query.
 func (d *DFA) FieldSymbolID(field string) int {
-	normalized := field
-	if d.caseInsensitive {
-		normalized = strings.ToLower(field)
+	if d.caseInsensitive && hasUpper(field) {
+		if id, ok := d.keyToID[strings.ToLower(field)]; ok {
+			return id
+		}
+		return 0
 	}
-	if id, ok := d.keyToID[normalized]; ok {
+	if id, ok := d.keyToID[field]; ok {
 		return id
 	}
 	return 0
+}
+
+func hasUpper(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] >= 'A' && s[i] <= 'Z' {
+			return true
+		}
+	}
+	return false
 }
 
 // IndexSymbolID returns the alphabet symbol ID for an array index.
