@@ -2,7 +2,6 @@ package output
 
 import (
 	"encoding/json"
-	"fmt"
 	"io"
 	"math"
 	"sort"
@@ -21,6 +20,15 @@ const (
 	ansiCyan        = "\x1b[0;36m"
 	ansiBoldMagenta = "\x1b[1;35m"
 )
+
+var indentBuf []byte
+
+func init() {
+	indentBuf = make([]byte, 256)
+	for i := range indentBuf {
+		indentBuf[i] = ' '
+	}
+}
 
 func Depth(value interface{}) int {
 	switch v := value.(type) {
@@ -48,8 +56,8 @@ func Depth(value interface{}) int {
 }
 
 func WriteResult(w io.Writer, value interface{}, path []query.PathType, pretty, showPath, colorize bool) error {
-	_, _ = fmt.Fprintf(w, "")
-	result := func() error {
+	var result error
+	func() {
 		if showPath && len(path) > 0 {
 			parts := make([]string, len(path))
 			for i, pt := range path {
@@ -57,16 +65,20 @@ func WriteResult(w io.Writer, value interface{}, path []query.PathType, pretty, 
 			}
 			pathStr := strings.Join(parts, ".")
 			if colorize {
-				fmt.Fprintf(w, "%s%s%s:\n", ansiBoldMagenta, pathStr, ansiReset)
+				io.WriteString(w, ansiBoldMagenta)
+				io.WriteString(w, pathStr)
+				io.WriteString(w, ansiReset)
+				io.WriteString(w, ":\n")
 			} else {
-				fmt.Fprintf(w, "%s:\n", pathStr)
+				io.WriteString(w, pathStr)
+				io.WriteString(w, ":\n")
 			}
 		}
 		if err := writeColoredJSON(w, value, 0, pretty, colorize); err != nil {
-			return err
+			result = err
+			return
 		}
-		fmt.Fprintln(w)
-		return nil
+		io.WriteString(w, "\n")
 	}()
 
 	if result != nil {
@@ -82,47 +94,35 @@ func writeColoredJSON(w io.Writer, value interface{}, indent int, pretty, colori
 
 	switch v := value.(type) {
 	case nil:
-		writeColor(w, "null", ansiDimRed, colorize)
+		writeColorString(w, "null", ansiDimRed, colorize)
 	case bool:
-		writeColor(w, fmt.Sprintf("%t", v), ansiBoldYellow, colorize)
+		writeColorBytes(w, strconv.AppendBool(nil, v), ansiBoldYellow, colorize)
 	case int:
-		writeColor(w, fmt.Sprintf("%d", v), ansiYellow, colorize)
+		writeColorBytes(w, strconv.AppendInt(nil, int64(v), 10), ansiYellow, colorize)
 	case float64:
-		writeColor(w, formatFloat(v), ansiYellow, colorize)
+		writeColorString(w, formatFloat(v), ansiYellow, colorize)
 	case string:
 		quoted, _ := json.Marshal(v)
-		writeColor(w, string(quoted), ansiGreen, colorize)
+		writeColorBytes(w, quoted, ansiGreen, colorize)
 	case []interface{}:
-		if _, err := fmt.Fprint(w, "["); err != nil {
-			return err
-		}
+		io.WriteString(w, "[")
 		for i, elem := range v {
 			if pretty {
-				if _, err := fmt.Fprintf(w, "\n%*s", nextIndent, ""); err != nil {
-					return err
-				}
+				writeIndent(w, nextIndent)
 			}
 			if err := writeColoredJSON(w, elem, nextIndent, pretty, colorize); err != nil {
 				return err
 			}
 			if i < len(v)-1 {
-				if _, err := fmt.Fprint(w, ","); err != nil {
-					return err
-				}
+				io.WriteString(w, ",")
 			}
 		}
 		if pretty && len(v) > 0 {
-			if _, err := fmt.Fprintf(w, "\n%*s", indent, ""); err != nil {
-				return err
-			}
+			writeIndent(w, indent)
 		}
-		if _, err := fmt.Fprint(w, "]"); err != nil {
-			return err
-		}
+		io.WriteString(w, "]")
 	case map[string]interface{}:
-		if _, err := fmt.Fprint(w, "{"); err != nil {
-			return err
-		}
+		io.WriteString(w, "{")
 		keys := make([]string, 0, len(v))
 		for k := range v {
 			keys = append(keys, k)
@@ -130,47 +130,59 @@ func writeColoredJSON(w io.Writer, value interface{}, indent int, pretty, colori
 		sort.Strings(keys)
 		for i, key := range keys {
 			if pretty {
-				if _, err := fmt.Fprintf(w, "\n%*s", nextIndent, ""); err != nil {
-					return err
-				}
+				writeIndent(w, nextIndent)
 			}
 			quotedKey, _ := json.Marshal(key)
-			writeColor(w, string(quotedKey), ansiCyan, colorize)
+			writeColorBytes(w, quotedKey, ansiCyan, colorize)
 			if pretty {
-				if _, err := fmt.Fprint(w, ": "); err != nil {
-					return err
-				}
+				io.WriteString(w, ": ")
 			} else {
-				if _, err := fmt.Fprint(w, ":"); err != nil {
-					return err
-				}
+				io.WriteString(w, ":")
 			}
 			if err := writeColoredJSON(w, v[key], nextIndent, pretty, colorize); err != nil {
 				return err
 			}
 			if i < len(keys)-1 {
-				if _, err := fmt.Fprint(w, ","); err != nil {
-					return err
-				}
+				io.WriteString(w, ",")
 			}
 		}
 		if pretty && len(keys) > 0 {
-			if _, err := fmt.Fprintf(w, "\n%*s", indent, ""); err != nil {
-				return err
-			}
+			writeIndent(w, indent)
 		}
-		if _, err := fmt.Fprint(w, "}"); err != nil {
-			return err
-		}
+		io.WriteString(w, "}")
 	}
 	return nil
 }
 
-func writeColor(w io.Writer, text, code string, colorize bool) {
+func writeIndent(w io.Writer, n int) {
+	io.WriteString(w, "\n")
+	for n > 0 {
+		chunk := n
+		if chunk > len(indentBuf) {
+			chunk = len(indentBuf)
+		}
+		w.Write(indentBuf[:chunk])
+		n -= chunk
+	}
+}
+
+func writeColorString(w io.Writer, text, code string, colorize bool) {
 	if colorize {
-		fmt.Fprintf(w, "%s%s%s", code, text, ansiReset)
+		io.WriteString(w, code)
+		io.WriteString(w, text)
+		io.WriteString(w, ansiReset)
 	} else {
-		fmt.Fprint(w, text)
+		io.WriteString(w, text)
+	}
+}
+
+func writeColorBytes(w io.Writer, text []byte, code string, colorize bool) {
+	if colorize {
+		io.WriteString(w, code)
+		w.Write(text)
+		io.WriteString(w, ansiReset)
+	} else {
+		w.Write(text)
 	}
 }
 
